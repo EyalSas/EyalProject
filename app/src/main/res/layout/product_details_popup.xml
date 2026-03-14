@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="320dp"
+    android:layout_height="wrap_content"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="10dp"
+    android:layout_gravity="center"
+    android:background="@android:color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <ImageButton
+            android:id="@+id/btnClosePopup"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="end"
+            android:background="@android:color/transparent"
+            android:src="@drawable/ic_shopping_cart"
+            android:contentDescription="Close"
+            android:tint="@android:color/darker_gray" />
+
+        <ImageView
+            android:id="@+id/imageViewPopupProduct"
+            android:layout_width="280dp"
+            android:layout_height="280dp"
+            android:layout_gravity="center_horizontal"
+            android:scaleType="fitCenter"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp"
+            android:src="@drawable/image_placeholder" />
+
+        <TextView
+            android:id="@+id/textViewPopupName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Detailed Product Name"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/black"
+            android:gravity="center_horizontal"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/textViewPopupPrice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="$999.99"
+            android:textSize="18sp"
+            android:textColor="#4CAF50"
+            android:textStyle="italic"
+            android:gravity="center_horizontal"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tap 'X' or outside to dismiss."
+            android:textSize="12sp"
+            android:textColor="@android:color/darker_gray"
+            android:gravity="center_horizontal" />
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

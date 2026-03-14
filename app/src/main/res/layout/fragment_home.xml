@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@drawable/background"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <!-- Animated Logo with Gradient -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/logoCard"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_marginTop="40dp"
+            android:layout_marginBottom="32dp"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="8dp"
+            app:strokeColor="@color/white"
+            app:strokeWidth="2dp"
+            android:outlineSpotShadowColor="@color/purple_200">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/icon"
+                android:gravity="center">
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Welcome Text with Modern Typography -->
+        <TextView
+            android:id="@+id/welcomeText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:gravity="center"
+            android:text="Welcome to GameZone"
+            android:textColor="@color/dark_primary"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:shadowColor="@color/shadow_dark"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
+
+        <TextView
+            android:id="@+id/subtitleText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="40dp"
+            android:gravity="center"
+            android:text="Your Ultimate Gaming Destination"
+            android:textColor="@color/dark_secondary"
+            android:textSize="16sp"
+            android:letterSpacing="0.03"
+            android:textStyle="normal" />
+
+        <!-- Modern Stats Section with Icons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="48dp"
+            android:gravity="center"
+            android:weightSum="3">
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/statsCard1"
+                android:layout_width="0dp"
+                android:layout_height="110dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:elevation="6dp"
+                app:cardCornerRadius="20dp"
+                app:cardBackgroundColor="@color/stats_card_blue"
+                app:rippleColor="@color/white_20"
+                android:clickable="true"
+                android:focusable="true">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="12dp">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_store"
+                        app:tint="@color/white"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/statsValue1"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="50+"
+                        android:textSize="20sp"
+                        android:textColor="@color/white"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Stores"
+                        android:textSize="12sp"
+                        android:textColor="@color/white_80" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/statsCard2"
+                android:layout_width="0dp"
+                android:layout_height="110dp"
+                android:layout_weight="1"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:elevation="6dp"
+                app:cardCornerRadius="20dp"
+                app:cardBackgroundColor="@color/stats_card_green"
+                app:rippleColor="@color/white_20"
+                android:clickable="true"
+                android:focusable="true">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="12dp">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_store"
+                        app:tint="@color/white"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/statsValue2"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="10K+"
+                        android:textSize="20sp"
+                        android:textColor="@color/white"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Products"
+                        android:textSize="12sp"
+                        android:textColor="@color/white_80" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/statsCard3"
+                android:layout_width="0dp"
+                android:layout_height="110dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:elevation="6dp"
+                app:cardCornerRadius="20dp"
+                app:cardBackgroundColor="@color/stats_card_purple"
+                app:rippleColor="@color/white_20"
+                android:clickable="true"
+                android:focusable="true">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="12dp">
+
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_store"
+                        app:tint="@color/white"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:id="@+id/statsValue3"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="24/7"
+                        android:textSize="20sp"
+                        android:textColor="@color/white"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Support"
+                        android:textSize="12sp"
+                        android:textColor="@color/white_80" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </LinearLayout>
+
+        <!-- Modern Action Buttons with Icons -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="@color/surface_variant">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonAbout"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:text="About Our Stores"
+                android:textSize="16sp"
+                android:textColor="@color/white"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_store"
+                app:iconGravity="textStart"
+                app:iconPadding="16dp"
+                app:backgroundTint="@color/stats_card_blue"
+                style="@style/Widget.Material3.Button" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="@color/surface_variant">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonFeatures"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:text="Explore Features"
+                android:textSize="16sp"
+                android:textColor="@color/white"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_store"
+                app:iconGravity="textStart"
+                app:iconPadding="16dp"
+                app:backgroundTint="@color/stats_card_purple"
+                style="@style/Widget.Material3.Button" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="@color/surface_variant">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonContact"
+                android:layout_width="match_parent"
+                android:layout_height="64dp"
+                android:text="Contact Support"
+                android:textSize="16sp"
+                android:textColor="@color/white"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_store"
+                app:iconGravity="textStart"
+                app:iconPadding="16dp"
+                app:backgroundTint="@color/stats_card_green"
+                style="@style/Widget.Material3.Button" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Modern Progress Indicator -->
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/loadingProgress"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="32dp"
+            android:visibility="invisible"
+            app:indicatorColor="@color/neon_blue"
+            app:trackColor="@color/white_20"
+            app:trackCornerRadius="3dp" />
+
+    </LinearLayout>
+
+</ScrollView>

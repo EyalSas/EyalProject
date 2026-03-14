@@ -1,0 +1,39 @@
+<resources>
+    <string name="app_name">EyalProject</string>
+    <string name="title_home">Home</string>
+    <string name="title_store">Store</string>
+    <string name="title_notifications">Notifications</string>
+    <string name="title_service">Service</string>
+    <string name="store_title">Store</string>
+    <string name="cart_title">Cart</string>
+
+    <string name="filter_all">All</string>
+    <string name="filter_computer">COMPUTERS</string>
+    <string name="filter_consoles">GAMING_CONSOLES</string>
+    <string name="filter_tvs">TVS_AND_DISPLAYS</string>
+    <string name="filter_videogames">VIDEO_GAMES</string>
+    <string name="filter_home">HOME_APPLIANCES</string>
+    <string name="filter_audio">AUDIO_EQUIPMENT</string>
+    <string name="filter_phones">SMARTPHONES</string>
+    <string name="filter_cameras">CAMERAS</string>
+    <string name="filter_networking">NETWORKING</string>
+    <string name="filter_smarthome">SMART_HOME</string>
+
+    <string-array name="filter_options">
+        <item>@string/filter_all</item>
+        <item>@string/filter_audio</item>
+        <item>@string/filter_cameras</item>
+        <item>@string/filter_computer</item>
+        <item>@string/filter_consoles</item>
+        <item>@string/filter_home</item>
+        <item>@string/filter_networking</item>
+        <item>@string/filter_phones</item>
+        <item>@string/filter_smarthome</item>
+        <item>@string/filter_tvs</item>
+        <item>@string/filter_videogames</item>
+    </string-array>
+
+    <string name="admin_username">or</string>
+    <string name="app_logo">VoltEdge App Logo</string>
+
+</resources>
