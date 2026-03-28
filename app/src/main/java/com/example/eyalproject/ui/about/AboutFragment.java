@@ -9,7 +9,6 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -46,12 +45,10 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     private List<Place> gameStores;    // List of Place models (stores).
     private StoreAdapter storeAdapter; // Adapter for the RecyclerView.
     private boolean showingMap = false; // State flag: true if map is visible, false if list is visible.
+
     // Map to link a Place's ID to its corresponding Google Maps Marker object.
     private Map<String, Marker> markerMap = new HashMap<>();
 
-    /**
-     * Called to have the fragment instantiate its user interface view.
-     */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_about, container, false);
@@ -60,33 +57,25 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         initializeGameStores();
         setupRecyclerView();
 
-        // Set up the FAB to switch views when clicked.
         toggleFab.setOnClickListener(v -> toggleView());
 
         // Important for MapView lifecycle: MUST be called in onCreateView.
-        mapView.onCreate(savedInstanceState);
-        // Asynchronously loads the map and calls onMapReady when ready.
-        mapView.getMapAsync(this);
+        if (mapView != null) {
+            mapView.onCreate(savedInstanceState);
+            mapView.getMapAsync(this);
+        }
 
         return rootView;
     }
 
-    /**
-     * Initializes UI elements from the layout.
-     * @param rootView The root view inflated in onCreateView.
-     */
     private void initializeViews(View rootView) {
         mapView = rootView.findViewById(R.id.mapView);
         storesRecyclerView = rootView.findViewById(R.id.storesRecyclerView);
         toggleFab = rootView.findViewById(R.id.toggleFab);
     }
 
-    /**
-     * Populates the list of game stores with dummy data.
-     */
     private void initializeGameStores() {
         gameStores = new ArrayList<>();
-        // Add 10 GameZone stores with their coordinates and details.
         gameStores.add(new Place(1L, "GameZone Jerusalem", 31.7683, 35.2137, "+972-2-500-1001", "Jaffa St 123, Jerusalem"));
         gameStores.add(new Place(2L, "GameZone Tel Aviv", 32.0853, 34.7818, "+972-3-500-1002", "Dizengoff St 45, Tel Aviv"));
         gameStores.add(new Place(3L, "GameZone Haifa", 32.7940, 34.9896, "+972-4-500-1003", "HaAtzmaut St 67, Haifa"));
@@ -99,23 +88,12 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         gameStores.add(new Place(10L, "GameZone Eilat", 29.5577, 34.9519, "+972-8-500-1010", "HaTmarim Blvd 34, Eilat"));
     }
 
-    /**
-     * Sets up the RecyclerView with a layout manager and the store adapter.
-     * The click listener on the adapter calls focusOnStore, linking the list to the map.
-     */
     private void setupRecyclerView() {
         storesRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        storeAdapter = new StoreAdapter(gameStores, store -> {
-            // Click action: focus the map on the selected store.
-            focusOnStore(store);
-        });
+        storeAdapter = new StoreAdapter(gameStores, store -> focusOnStore(store));
         storesRecyclerView.setAdapter(storeAdapter);
     }
 
-    /**
-     * Callback method called when the map is ready to be used.
-     * @param googleMap The ready GoogleMap instance.
-     */
     @Override
     public void onMapReady(GoogleMap googleMap) {
         this.googleMap = googleMap;
@@ -124,16 +102,11 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         addStoreMarkers();
 
         if (!gameStores.isEmpty()) {
-            // Center map view over a central point (Tel Aviv coordinates used here) and set zoom level.
             LatLng israelCenter = new LatLng(32.0853, 34.7818);
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(israelCenter, 8));
         }
     }
 
-    /**
-     * Clears existing markers and adds a new marker for every store in the list.
-     * It also populates the markerMap for easy lookup later.
-     */
     private void addStoreMarkers() {
         if (googleMap == null) return;
         markerMap.clear();
@@ -142,94 +115,88 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
             Marker marker = googleMap.addMarker(new MarkerOptions()
                     .position(storeLocation)
                     .title(store.getName())
-                    .snippet(store.getAddress())); // Snippet provides extra detail in the info window
+                    .snippet(store.getAddress()));
 
-            // Map the Place ID to the Marker object.
             markerMap.put(String.valueOf(store.getId()), marker);
         }
     }
 
-    /**
-     * Toggles the visibility between the MapView and the RecyclerView.
-     */
     private void toggleView() {
         showingMap = !showingMap;
         if (showingMap) {
             // Show map, hide list
             mapView.setVisibility(View.VISIBLE);
             storesRecyclerView.setVisibility(View.GONE);
-            // Change FAB icon to represent the 'list' view (assuming ic_store represents the list icon)
+            // 💡 FIX: Set icon to 'list' so user knows tapping it goes back to the list
             toggleFab.setImageResource(R.drawable.ic_store);
         } else {
             // Show list, hide map
             mapView.setVisibility(View.GONE);
             storesRecyclerView.setVisibility(View.VISIBLE);
-            // Change FAB icon to represent the 'map' view
-            toggleFab.setImageResource(R.drawable.ic_store); // Note: Should probably be an ic_map or similar
+            // 💡 FIX: Assuming you have a map icon or default dashboard icon.
+            toggleFab.setImageResource(android.R.drawable.ic_dialog_map);
         }
     }
 
-    /**
-     * Centers the map on the selected store and shows its marker info window.
-     * It also switches to map view if the list is currently showing.
-     * @param store The Place object to focus on.
-     */
     private void focusOnStore(Place store) {
         if (!showingMap) {
-            toggleView(); // Switch to map view if not already showing
+            toggleView();
         }
         LatLng storeLocation = new LatLng(store.getLatitude(), store.getLongitude());
-        // Animate camera movement to the store location with a closer zoom level (15f)
         googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(storeLocation, 15f), 1000, null);
 
-        // Retrieve the corresponding marker and show its info window
         Marker marker = markerMap.get(String.valueOf(store.getId()));
         if (marker != null) {
             marker.showInfoWindow();
         }
     }
 
+    // --- 💡 FIX: Complete MapView Lifecycle Methods to prevent memory leaks ---
+    @Override
+    public void onStart() {
+        super.onStart();
+        if (mapView != null) mapView.onStart();
+    }
 
-    // --- MapView Lifecycle Methods ---
-    // These methods ensure the MapView is properly managed alongside the Fragment lifecycle.
     @Override
     public void onResume() {
         super.onResume();
-        mapView.onResume();
+        if (mapView != null) mapView.onResume();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        mapView.onPause();
+        if (mapView != null) mapView.onPause();
     }
 
     @Override
-    public void onDestroy() {
-        super.onDestroy();
-        mapView.onDestroy();
+    public void onStop() {
+        super.onStop();
+        if (mapView != null) mapView.onStop();
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // 💡 FIX: Destroy map here when Fragment's view is destroyed to free memory
+        if (mapView != null) mapView.onDestroy();
     }
 
     @Override
     public void onLowMemory() {
         super.onLowMemory();
-        mapView.onLowMemory();
+        if (mapView != null) mapView.onLowMemory();
     }
 }
 
 // --- RecyclerView Adapter and ViewHolder ---
 
-/**
- * Adapter for the RecyclerView to display individual store details (Place objects).
- */
 class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHolder> {
 
     private final List<Place> stores;
-    private final OnStoreClickListener listener; // Interface for handling clicks.
+    private final OnStoreClickListener listener;
 
-    /**
-     * Interface to define the action taken when a store item is clicked.
-     */
     public interface OnStoreClickListener {
         void onStoreClick(Place store);
     }
@@ -242,7 +209,6 @@ class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHolder> {
     @NonNull
     @Override
     public StoreViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        // Inflate the layout for a single list item.
         View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.list_item_store, parent, false);
         return new StoreViewHolder(view);
     }
@@ -258,16 +224,12 @@ class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHolder> {
         return stores.size();
     }
 
-    /**
-     * ViewHolder class to hold and manage views for a single store item.
-     */
     static class StoreViewHolder extends RecyclerView.ViewHolder {
         TextView storeName, storeAddress, storePhone;
         MaterialButton callButton, directionsButton;
 
         public StoreViewHolder(@NonNull View itemView) {
             super(itemView);
-            // Initialize views found in list_item_store.xml
             storeName = itemView.findViewById(R.id.storeName);
             storeAddress = itemView.findViewById(R.id.storeAddress);
             storePhone = itemView.findViewById(R.id.storePhone);
@@ -275,36 +237,23 @@ class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHolder> {
             directionsButton = itemView.findViewById(R.id.directionsButton);
         }
 
-        /**
-         * Binds the Place data to the ViewHolder views and sets click listeners.
-         * @param store The Place object containing store details.
-         * @param listener The click listener to handle map focusing.
-         */
         public void bind(final Place store, final OnStoreClickListener listener) {
             storeName.setText(store.getName());
             storeAddress.setText(store.getAddress());
             storePhone.setText(store.getPhoneNumber());
 
-            // Set the main item click listener (used to focus map)
             itemView.setOnClickListener(v -> listener.onStoreClick(store));
 
-            // Set button click listeners
-
-            // 1. Call Button: Initiates a phone call Intent.
             callButton.setOnClickListener(v -> {
                 Intent intent = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + store.getPhoneNumber()));
                 itemView.getContext().startActivity(intent);
             });
 
-            // 2. Directions Button: Launches Google Maps app with directions/location.
             directionsButton.setOnClickListener(v -> {
-                // URI uses geo:0,0?q=latitude,longitude(StoreName) format for location lookup
                 Uri gmmIntentUri = Uri.parse("geo:0,0?q=" + store.getLatitude() + "," + store.getLongitude() + "(" + Uri.encode(store.getName()) + ")");
                 Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
-                // Explicitly set package to Google Maps app for reliability
                 mapIntent.setPackage("com.google.android.apps.maps");
 
-                // Check if Google Maps is installed before starting the activity
                 if (mapIntent.resolveActivity(itemView.getContext().getPackageManager()) != null) {
                     itemView.getContext().startActivity(mapIntent);
                 }

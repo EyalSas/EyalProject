@@ -1,6 +1,7 @@
 package com.example.eyalproject.ui.service;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.TypedValue;
@@ -16,21 +17,23 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 
-import com.example.eyalproject.DBHelper;
 import com.example.eyalproject.MainActivity;
 import com.example.eyalproject.R;
-// Correct binding class for fragment_service.xml
 import com.example.eyalproject.databinding.FragmentServiceBinding;
+import com.example.eyalproject.ui.cart.CartReminderReceiver;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Query;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class ServiceFragment extends Fragment {
 
     private FragmentServiceBinding binding;
-    private DBHelper dbHelper;
     private String username;
 
-    // Define the admin username
     private static final String ADMIN_USERNAME = "or";
 
     @Override
@@ -41,10 +44,8 @@ public class ServiceFragment extends Fragment {
         if (getActivity() != null) {
             username = ((MainActivity) getActivity()).getUsername();
         }
-        dbHelper = new DBHelper(getContext());
 
         initializeUI();
-
         loadServicesFromDatabase();
 
         return root;
@@ -86,39 +87,68 @@ public class ServiceFragment extends Fragment {
     }
 
     private void addService(String serviceName) {
-        int userId = dbHelper.getUserId(username);
-        if (userId == -1) {
-            Toast.makeText(getContext(), "User not found", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (FirebaseAuth.getInstance().getCurrentUser() == null) return;
+        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-        boolean success = dbHelper.addService(serviceName, userId);
-        if (success) {
-            // 💡 FIXED: Notify the admin about the new service request
-            dbHelper.notifyAdminNewService(serviceName, username);
+        // 💡 FIX: Save service request to Firebase
+        Map<String, Object> serviceRequest = new HashMap<>();
+        serviceRequest.put("serviceName", serviceName);
+        serviceRequest.put("ownerUid", uid);
+        serviceRequest.put("ownerUsername", username);
+        serviceRequest.put("status", "waiting");
+        serviceRequest.put("timestamp", System.currentTimeMillis());
 
-            Toast.makeText(getContext(), "Service added successfully (Waiting)", Toast.LENGTH_SHORT).show();
-            loadServicesFromDatabase();
-        } else {
-            Toast.makeText(getContext(), "Failed to add service", Toast.LENGTH_SHORT).show();
-        }
+        FirebaseFirestore.getInstance().collection("services").add(serviceRequest)
+                .addOnSuccessListener(documentReference -> {
+                    if (!isAdded() || getContext() == null) return;
+
+                    // Trigger notification via Broadcast Receiver
+                    Intent intent = new Intent(getContext(), CartReminderReceiver.class);
+                    intent.setAction("NEW_SERVICE_REQUEST");
+                    intent.putExtra("message", username + " has requested a new service: " + serviceName);
+                    intent.putExtra("title", "🔔 New Service Request!");
+                    getContext().sendBroadcast(intent);
+
+                    Toast.makeText(getContext(), "Service added successfully (Waiting)", Toast.LENGTH_SHORT).show();
+                    loadServicesFromDatabase();
+                })
+                .addOnFailureListener(e -> {
+                    if (getContext() != null) {
+                        Toast.makeText(getContext(), "Failed to add service", Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void updateServiceCounts() {
-        if (ADMIN_USERNAME.equalsIgnoreCase(username)) {
+        if (ADMIN_USERNAME.equalsIgnoreCase(username) || FirebaseAuth.getInstance().getCurrentUser() == null) {
             return;
         }
-        int[] counts = dbHelper.getServiceCounts(username);
+        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-        // 🟢 FIX APPLIED HERE: Use .getRoot() on the included layout bindings to get the View.
-        View waitingCard = binding.cardWaiting.getRoot();
-        View completedCard = binding.cardCompleted.getRoot();
+        // 💡 FIX: Fetch counts asynchronously from Firebase
+        FirebaseFirestore.getInstance().collection("services")
+                .whereEqualTo("ownerUid", uid)
+                .get()
+                .addOnSuccessListener(querySnapshot -> {
+                    if (!isAdded() || getContext() == null) return;
 
-        TextView waitingCount = waitingCard.findViewById(R.id.waitingCount);
-        TextView completedCount = completedCard.findViewById(R.id.completedCount);
+                    int waiting = 0;
+                    int completed = 0;
 
-        waitingCount.setText(String.valueOf(counts[0]));
-        completedCount.setText(String.valueOf(counts[2]));
+                    for (QueryDocumentSnapshot doc : querySnapshot) {
+                        String status = doc.getString("status");
+                        if ("waiting".equals(status)) waiting++;
+                        if ("completed".equals(status)) completed++;
+                    }
+
+                    View waitingCard = binding.cardWaiting.getRoot();
+                    View completedCard = binding.cardCompleted.getRoot();
+                    TextView waitingCount = waitingCard.findViewById(R.id.waitingCount);
+                    TextView completedCount = completedCard.findViewById(R.id.completedCount);
+
+                    waitingCount.setText(String.valueOf(waiting));
+                    completedCount.setText(String.valueOf(completed));
+                });
     }
 
     private void loadServiceItems() {
@@ -126,28 +156,46 @@ public class ServiceFragment extends Fragment {
         servicesContainer.removeAllViews();
 
         boolean isAdmin = ADMIN_USERNAME.equalsIgnoreCase(username);
-        List<String> rawServicesList;
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        Query query;
 
+        // 💡 FIX: Query logic branches for Admin vs User
         if (isAdmin) {
-            rawServicesList = dbHelper.getAllServicesForAllUsers();
+            query = db.collection("services").orderBy("timestamp", Query.Direction.ASCENDING);
         } else {
-            rawServicesList = dbHelper.getUserServices(username);
+            if (FirebaseAuth.getInstance().getCurrentUser() == null) return;
+            String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+            query = db.collection("services").whereEqualTo("ownerUid", uid).orderBy("timestamp", Query.Direction.DESCENDING);
         }
 
-        for (String item : rawServicesList) {
-            View serviceCard = createServiceCard(item, isAdmin);
-            servicesContainer.addView(serviceCard);
-        }
+        query.get().addOnSuccessListener(querySnapshot -> {
+            if (!isAdded() || getContext() == null) return;
+            servicesContainer.removeAllViews();
+
+            for (QueryDocumentSnapshot doc : querySnapshot) {
+                String docId = doc.getId();
+                String serviceName = doc.getString("serviceName");
+                String status = doc.getString("status");
+                String ownerUsername = doc.getString("ownerUsername");
+
+                View serviceCard = createServiceCard(docId, serviceName, status, ownerUsername, isAdmin);
+                servicesContainer.addView(serviceCard);
+            }
+        }).addOnFailureListener(e -> {
+            if (getContext() != null) {
+                Toast.makeText(getContext(), "Failed to load services", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private int dpToPx(int dp) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, getResources().getDisplayMetrics());
     }
 
-    private View createServiceCard(String item, boolean isAdmin) {
+    // 💡 FIX: Pass Firebase Document ID so the Admin can update the exact record
+    private View createServiceCard(String docId, String serviceName, String status, String ownerUsername, boolean isAdmin) {
         Context context = getContext();
 
-        // 1. Root Card Layout
         LinearLayout rootLayout = new LinearLayout(context);
         LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -157,38 +205,16 @@ public class ServiceFragment extends Fragment {
         rootLayout.setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16));
         rootLayout.setBackgroundColor(Color.parseColor("#2C2C2C"));
 
-        // 2. Parse Data
-        String serviceName = "";
-        String status = "";
-        String ownerUsername = "";
+        if (serviceName == null) serviceName = "Unknown Service";
+        if (status == null) status = "unknown";
 
-        try {
-            String[] parts = item.split(" - ");
-            status = parts[1].trim();
-
-            // 💡 FIXED: Ensure correct parsing for Admin view
-            if (isAdmin) {
-                // Format: "ServiceName by OwnerUsername - Status"
-                String[] userParts = parts[0].split(" by ");
-                serviceName = userParts[0].trim();
-                ownerUsername = userParts[1].trim();
-            } else {
-                serviceName = parts[0].trim();
-            }
-        } catch (Exception e) {
-            serviceName = "Error Parsing Service";
-            status = "unknown";
-        }
-
-        // Determine status color
         int statusColor = Color.parseColor("#FFFFFF");
         if ("completed".equalsIgnoreCase(status)) {
-            statusColor = Color.parseColor("#4CAF50"); // Green
+            statusColor = Color.parseColor("#4CAF50");
         } else if ("waiting".equalsIgnoreCase(status)) {
-            statusColor = Color.parseColor("#FF6347"); // Red
+            statusColor = Color.parseColor("#FF6347");
         }
 
-        // 3. Service Name (Title)
         TextView nameTextView = new TextView(context);
         nameTextView.setText(serviceName);
         nameTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
@@ -196,17 +222,14 @@ public class ServiceFragment extends Fragment {
         nameTextView.setTypeface(null, android.graphics.Typeface.BOLD);
         rootLayout.addView(nameTextView);
 
-        // 4. Owner (Admin Only)
         if (isAdmin) {
             TextView ownerTextView = new TextView(context);
-            // 💡 FIXED: Display the username clearly
-            ownerTextView.setText("Requested by: " + ownerUsername);
+            ownerTextView.setText("Requested by: " + (ownerUsername != null ? ownerUsername : "Unknown"));
             ownerTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
             ownerTextView.setTextColor(Color.parseColor("#AAAAAA"));
             rootLayout.addView(ownerTextView);
         }
 
-        // 5. Status and Action Button Row
         LinearLayout statusRow = new LinearLayout(context);
         statusRow.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
@@ -214,14 +237,12 @@ public class ServiceFragment extends Fragment {
         rowParams.topMargin = dpToPx(8);
         statusRow.setLayoutParams(rowParams);
 
-        // Status Label
         TextView statusLabel = new TextView(context);
         statusLabel.setText("Status: ");
         statusLabel.setTextColor(Color.parseColor("#999999"));
         statusLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         statusRow.addView(statusLabel);
 
-        // Status Text
         TextView statusTextView = new TextView(context);
         statusTextView.setText(status.toUpperCase());
         statusTextView.setTextColor(statusColor);
@@ -229,7 +250,6 @@ public class ServiceFragment extends Fragment {
         statusTextView.setTypeface(null, android.graphics.Typeface.BOLD);
         statusRow.addView(statusTextView);
 
-        // 6. Admin Action Button
         if (isAdmin && !"completed".equalsIgnoreCase(status)) {
             Button adminButton = new Button(context);
             adminButton.setText("Complete");
@@ -245,39 +265,37 @@ public class ServiceFragment extends Fragment {
 
             final String finalServiceName = serviceName;
             final String finalOwnerUsername = ownerUsername;
-            adminButton.setOnClickListener(v -> handleAdminAction(finalServiceName, finalOwnerUsername));
+
+            // Pass the Document ID to uniquely identify what to update in Firebase
+            adminButton.setOnClickListener(v -> handleAdminAction(docId, finalServiceName, finalOwnerUsername));
 
             statusRow.addView(adminButton);
         }
 
         rootLayout.addView(statusRow);
-
         return rootLayout;
     }
 
-    private void handleAdminAction(String serviceName, String ownerUsername) {
-        int userId = dbHelper.getUserId(ownerUsername);
-        if (userId == -1) {
-            Toast.makeText(getContext(), "Error: Service owner not found.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        int serviceId = dbHelper.getServiceIdByNameAndUser(serviceName, ownerUsername);
-
-        if (serviceId != -1) {
-            String newStatus = "completed";
-            dbHelper.updateServiceStatus(serviceId, newStatus);
-            loadServicesFromDatabase();
-            Toast.makeText(getContext(), serviceName + " status set to " + newStatus + " for " + ownerUsername, Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(getContext(), "Error: Service ID not found. Service might be a duplicate.", Toast.LENGTH_SHORT).show();
-        }
+    // 💡 FIX: Update status directly in Firebase
+    private void handleAdminAction(String docId, String serviceName, String ownerUsername) {
+        FirebaseFirestore.getInstance().collection("services").document(docId)
+                .update("status", "completed")
+                .addOnSuccessListener(aVoid -> {
+                    if (!isAdded() || getContext() == null) return;
+                    loadServicesFromDatabase();
+                    Toast.makeText(getContext(), serviceName + " status set to completed for " + ownerUsername, Toast.LENGTH_SHORT).show();
+                })
+                .addOnFailureListener(e -> {
+                    if (getContext() != null) {
+                        Toast.makeText(getContext(), "Failed to update service.", Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if (dbHelper != null && username != null) {
+        if (username != null) {
             loadServicesFromDatabase();
         }
     }

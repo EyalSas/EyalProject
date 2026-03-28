@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.application)
+    id("com.google.gms.google-services") // 💡 ADDED: Google Services Plugin for Firebase
 }
 
 android {
@@ -31,19 +32,15 @@ android {
     }
     buildFeatures {
         viewBinding = true
-        compose = true   // חובה אם אתה משתמש ב-Compose
+        compose = true
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8" // תואם ל-Compose BOM
+        kotlinCompilerExtensionVersion = "1.5.8"
     }
 }
 
 dependencies {
-
-    // ─────────────────────────────
-    // ADD COMPOSE BOM (הוספנו כאן!)
-    // ─────────────────────────────
     implementation(platform("androidx.compose:compose-bom:2024.04.01"))
 
     // Compose
@@ -71,6 +68,11 @@ dependencies {
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.2.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // 💡 ADDED: Firebase Dependencies
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
 
     // Other
     implementation("com.squareup.picasso:picasso:2.71828")

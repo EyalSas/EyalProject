@@ -6,6 +6,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -30,456 +31,392 @@ import androidx.annotation.NonNull;
 import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
 
-import com.example.eyalproject.DBHelper;
-import com.example.eyalproject.MainActivity;
+import com.example.eyalproject.FirebaseHelper;
 import com.example.eyalproject.R;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.squareup.picasso.Picasso;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Map;
 
 public class StoreFragment extends Fragment {
 
-    private DBHelper dbHelper;
+    // ── Views ──────────────────────────────────────────────────────────────────
+    private FirebaseHelper fbHelper;
     private LinearLayout tableLayout;
     private Spinner spinnerFilter;
     private TextInputEditText editTextSearch;
     private ProgressBar progressBar;
     private NestedScrollView nestedScrollView;
 
+    // ── State ──────────────────────────────────────────────────────────────────
     private String selectedFilter = "All";
     private String currentSearchQuery = "";
 
-    private ExecutorService executorService = Executors.newSingleThreadExecutor();
-    private Handler mainHandler = new Handler(Looper.getMainLooper());
+    /** Raw product list from the last Firebase fetch — never re-fetched unless filter changes. */
+    private List<FirebaseHelper.Product> cachedProducts = null;
+    /** Which filter value the cache belongs to. */
+    private String cachedFilterKey = null;
 
-    private List<String> initiallyLoadedCategories = new ArrayList<>();
+    // ── Threading ──────────────────────────────────────────────────────────────
+    /** Posts UI updates — always the main thread. */
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
+    /**
+     * Dedicated background thread for filtering + grouping work.
+     * Keeps the main thread completely free during search.
+     */
+    private HandlerThread filterThread;
+    private Handler filterHandler;
+
+    /** Debounce runnable: re-scheduled on every keystroke, fires 300 ms after the last one. */
+    private final Runnable searchRunnable = () -> filterAndRender(cachedProducts);
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+
+    @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_store, container, false);
 
-        dbHelper = new DBHelper(getContext());
-        initializeViews(root);
+        fbHelper = new FirebaseHelper();
+        startFilterThread();
+        initViews(root);
         setupSpinner();
         setupSearch();
-
-        // Load initial data (2 products per category)
-        loadInitialData();
+        fetchProducts();
 
         return root;
     }
 
-    private void initializeViews(View root) {
-        tableLayout = root.findViewById(R.id.tableLayout);
-        spinnerFilter = root.findViewById(R.id.spinnerFilter);
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // Cancel every pending callback so nothing fires on a detached fragment.
+        mainHandler.removeCallbacksAndMessages(null);
+        filterHandler.removeCallbacksAndMessages(null);
+        filterThread.quitSafely();
+    }
+
+    // ── Init helpers ───────────────────────────────────────────────────────────
+
+    private void startFilterThread() {
+        filterThread = new HandlerThread("StoreFilterThread");
+        filterThread.start();
+        filterHandler = new Handler(filterThread.getLooper());
+    }
+
+    private void initViews(View root) {
+        tableLayout    = root.findViewById(R.id.tableLayout);
+        spinnerFilter  = root.findViewById(R.id.spinnerFilter);
         editTextSearch = root.findViewById(R.id.editTextSearch);
-        progressBar = root.findViewById(R.id.progressBar);
+        progressBar    = root.findViewById(R.id.progressBar);
         nestedScrollView = root.findViewById(R.id.nestedScrollView);
+
+        // Hardware layer lets the GPU composite the scroll surface — smoother flings.
+        nestedScrollView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
     }
 
     private void setupSpinner() {
         try {
-            ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(requireContext(),
-                    R.array.filter_options, R.layout.spinner_item);
+            ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
+                    requireContext(), R.array.filter_options, R.layout.spinner_item);
             adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
             spinnerFilter.setAdapter(adapter);
         } catch (Exception e) {
-            ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(requireContext(),
-                    R.array.filter_options, android.R.layout.simple_spinner_item);
+            ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
+                    requireContext(), R.array.filter_options,
+                    android.R.layout.simple_spinner_item);
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
             spinnerFilter.setAdapter(adapter);
         }
 
         spinnerFilter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                selectedFilter = parent.getItemAtPosition(position).toString();
-                resetAndLoadData();
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                String newFilter = parent.getItemAtPosition(pos).toString();
+                if (newFilter.equals(selectedFilter)) return; // no-op if nothing changed
+                selectedFilter = newFilter;
+                // Invalidate cache — next fetchProducts() will hit Firebase.
+                cachedProducts  = null;
+                cachedFilterKey = null;
+                fetchProducts();
             }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
     }
 
     private void setupSearch() {
         editTextSearch.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void afterTextChanged(Editable s) {}
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                currentSearchQuery = s.toString().trim();
-                // Add delay to avoid too many searches while typing
-                mainHandler.removeCallbacks(searchRunnable);
-                mainHandler.postDelayed(searchRunnable, 500);
-            }
+                currentSearchQuery = s.toString().trim().toLowerCase(Locale.ROOT);
 
-            @Override public void afterTextChanged(Editable s) {}
+                // Debounce: cancel previous pending search, schedule a new one.
+                filterHandler.removeCallbacks(searchRunnable);
+
+                if (cachedProducts != null) {
+                    // Products already loaded — filter locally, no network call.
+                    filterHandler.postDelayed(searchRunnable, 300);
+                }
+                // If cache is empty a fetch is already in-flight; the callback will call
+                // filterAndRender() with the correct query when it arrives.
+            }
         });
     }
 
-    private Runnable searchRunnable = new Runnable() {
-        @Override
-        public void run() {
-            resetAndLoadData();
+    // ── Data loading ───────────────────────────────────────────────────────────
+
+    /**
+     * Hits Firebase only when the cache is stale (filter changed or first load).
+     * Otherwise jumps straight to filterAndRender() on the background thread.
+     */
+    private void fetchProducts() {
+        if (cachedProducts != null && selectedFilter.equals(cachedFilterKey)) {
+            // Cache is warm — skip the network entirely.
+            filterHandler.post(() -> filterAndRender(cachedProducts));
+            return;
         }
-    };
 
-    private void resetAndLoadData() {
-        tableLayout.removeAllViews();
-        initiallyLoadedCategories.clear();
-        loadInitialData();
-    }
+        showProgress(true);
 
-    private void loadInitialData() {
-        progressBar.setVisibility(View.VISIBLE);
-
-        executorService.execute(() -> {
-            try {
-                List<String> productTypes = getProductTypesToLoad();
-
+        FirebaseHelper.ProductsCallback callback = new FirebaseHelper.ProductsCallback() {
+            @Override
+            public void onProductsLoaded(List<FirebaseHelper.Product> products) {
+                if (!isAdded()) return;
+                cachedProducts  = products;
+                cachedFilterKey = selectedFilter;
+                // Hand off to background thread immediately.
+                filterHandler.post(() -> filterAndRender(products));
+            }
+            @Override
+            public void onError(String error) {
+                if (!isAdded()) return;
                 mainHandler.post(() -> {
-                    // 💡 FIX: Check if fragment is still attached
-                    if (!isAdded() || getContext() == null) return;
-
-                    // First load 2 products per category for quick display
-                    loadLimitedProducts(productTypes, 2);
-                    progressBar.setVisibility(View.GONE);
-
-                    // Then immediately load the rest in background
-                    loadRemainingProducts(productTypes);
-                });
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                mainHandler.post(() -> {
-                    // 💡 FIX: Check if fragment is still attached
-                    if (!isAdded() || getContext() == null) return;
-
-                    progressBar.setVisibility(View.GONE);
-                    showSnackbar("Error loading products");
+                    showProgress(false);
+                    showSnackbar("Error loading products: " + error);
                 });
             }
-        });
-    }
+        };
 
-    private List<String> getProductTypesToLoad() {
-        if (!selectedFilter.equals("All")) {
-            return List.of(selectedFilter);
+        if ("All".equals(selectedFilter)) {
+            fbHelper.getAllProducts(callback);
         } else {
-            // NOTE: dbHelper.getAllProductTypes() is used here
-            return dbHelper.getAllProductTypes();
+            String key = selectedFilter.toUpperCase(Locale.ROOT).replace(" ", "_");
+            fbHelper.getProductsByType(key, callback);
         }
     }
 
-    private void loadLimitedProducts(List<String> productTypes, int limit) {
-        for (String productType : productTypes) {
-            // Get all products for this type
-            List<String> allProductNames = dbHelper.getProductsNamesByTypeAndSearch(productType, currentSearchQuery);
+    // ── Background: filter + group ─────────────────────────────────────────────
 
-            if (!allProductNames.isEmpty()) {
-                // Take only the first 'limit' products
-                List<String> limitedProductNames = allProductNames.subList(0, Math.min(limit, allProductNames.size()));
+    /**
+     * Runs on {@code filterThread}.
+     * Filters by search query and groups by type — all off the main thread.
+     * Posts one single Runnable to the main thread when done.
+     */
+    private void filterAndRender(List<FirebaseHelper.Product> source) {
+        if (source == null) return;
 
-                // NOTE: Relying on DBHelper to return lists in order matching limitedProductNames
-                List<Double> limitedProductPrices = dbHelper.getProductsPricesByName(limitedProductNames);
-                List<String> limitedProductImageUrls = dbHelper.getProductImageUrlsByName(limitedProductNames);
+        // LinkedHashMap preserves insertion order for stable category ordering.
+        Map<String, List<FirebaseHelper.Product>> grouped = new LinkedHashMap<>();
+        String query = currentSearchQuery; // snapshot to avoid race with UI thread
 
-                addHorizontalProductSection(productType, limitedProductNames, limitedProductPrices, limitedProductImageUrls);
-                initiallyLoadedCategories.add(productType);
+        for (FirebaseHelper.Product p : source) {
+            if (query.isEmpty() || p.name.toLowerCase(Locale.ROOT).contains(query)) {
+                String type = (p.type != null) ? p.type : "OTHER";
+                grouped.computeIfAbsent(type, k -> new ArrayList<>()).add(p);
             }
         }
-    }
 
-    private void loadRemainingProducts(List<String> productTypes) {
-        executorService.execute(() -> {
-            try {
-                for (String productType : productTypes) {
-                    // Get all products for this type
-                    List<String> allProductNames = dbHelper.getProductsNamesByTypeAndSearch(productType, currentSearchQuery);
+        // Snapshot the result — hand immutable data to the main thread.
+        final Map<String, List<FirebaseHelper.Product>> result = grouped;
 
-                    if (allProductNames.size() > 2) {
-                        // Take products starting from index 2 (skip the first 2 we already loaded)
-                        List<String> remainingProductNames = allProductNames.subList(2, allProductNames.size());
-
-                        // NOTE: Relying on DBHelper to return lists in order matching remainingProductNames
-                        List<Double> remainingProductPrices = dbHelper.getProductsPricesByName(remainingProductNames);
-                        List<String> remainingProductImageUrls = dbHelper.getProductImageUrlsByName(remainingProductNames);
-
-                        // Update the UI on main thread
-                        mainHandler.post(() -> {
-                            // 💡 FIX: Check if fragment is attached
-                            if (!isAdded() || getContext() == null) return;
-                            addProductsToExistingCategory(productType, remainingProductNames, remainingProductPrices, remainingProductImageUrls);
-                        });
-
-                        // Small delay to make the loading feel smooth
-                        Thread.sleep(100);
-                    }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        mainHandler.post(() -> {
+            if (!isAdded() || getContext() == null) return;
+            showProgress(false);
+            renderSections(result);
         });
     }
 
-    private void addProductsToExistingCategory(String productType, List<String> names, List<Double> prices, List<String> urls) {
-        // 💡 FIX: Empty check to prevent StringIndexOutOfBoundsException
-        if (getContext() == null || productType == null || productType.isEmpty()) return;
+    // ── Main thread: render ────────────────────────────────────────────────────
 
-        // Find the existing HorizontalScrollView for this category
-        String searchTitle = productType.replace('_', ' ').toLowerCase(Locale.ROOT);
-        searchTitle = searchTitle.substring(0, 1).toUpperCase(Locale.ROOT) + searchTitle.substring(1);
+    /**
+     * Called on the main thread with the fully prepared, filtered, grouped data.
+     * Clears the table and adds every category in one synchronous pass —
+     * no recursive handler loops, no artificial delays.
+     */
+    private void renderSections(Map<String, List<FirebaseHelper.Product>> grouped) {
+        tableLayout.removeAllViews();
 
-        for (int i = 0; i < tableLayout.getChildCount(); i++) {
-            View child = tableLayout.getChildAt(i);
-            if (child instanceof TextView) {
-                TextView titleView = (TextView) child;
-
-                if (titleView.getText().toString().equals(searchTitle)) {
-                    // Found the title, next view should be the HorizontalScrollView
-                    if (i + 1 < tableLayout.getChildCount()) {
-                        View nextChild = tableLayout.getChildAt(i + 1);
-                        if (nextChild instanceof HorizontalScrollView) {
-                            HorizontalScrollView hScrollView = (HorizontalScrollView) nextChild;
-                            LinearLayout horizontalContainer = (LinearLayout) hScrollView.getChildAt(0);
-
-                            if (horizontalContainer != null) {
-                                // Add the remaining products to the existing container
-                                LayoutInflater inflater = getLayoutInflater();
-                                for (int j = 0; j < names.size(); j++) {
-                                    if (j < prices.size() && j < urls.size()) {
-                                        // 💡 FIX: Ensure we use the correct element index from the matched lists
-                                        addProductCardToContainer(inflater, horizontalContainer, names.get(j), prices.get(j), urls.get(j));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
+        if (grouped.isEmpty()) {
+            showSnackbar("No products found.");
+            return;
         }
-    }
-
-    private void addHorizontalProductSection(String title, List<String> names, List<Double> prices, List<String> urls) {
-        if (getContext() == null) return;
 
         LayoutInflater inflater = getLayoutInflater();
-
-        // 1. Title TextView
-        TextView textViewTitle = new TextView(getContext());
-        String displayTitle = title.replace('_', ' ').toLowerCase(Locale.ROOT);
-        displayTitle = displayTitle.substring(0, 1).toUpperCase(Locale.ROOT) + displayTitle.substring(1);
-        textViewTitle.setText(displayTitle);
-        textViewTitle.setTextSize(20);
-        textViewTitle.setTypeface(Typeface.DEFAULT_BOLD);
-        textViewTitle.setTextColor(Color.parseColor("#1976D2"));
-        textViewTitle.setPadding(16, 24, 16, 8);
-        tableLayout.addView(textViewTitle);
-
-        // 2. Horizontal Scroll View (allows horizontal swiping)
-        HorizontalScrollView hScrollView = new HorizontalScrollView(getContext());
-        hScrollView.setLayoutParams(new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        // 3. Inner Horizontal LinearLayout (holds all the product cards side-by-side)
-        LinearLayout horizontalContainer = new LinearLayout(getContext());
-        horizontalContainer.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        horizontalContainer.setOrientation(LinearLayout.HORIZONTAL);
-        horizontalContainer.setPadding(8, 0, 8, 0);
-
-        // 4. Populate the Horizontal LinearLayout with Product Cards
-        for (int i = 0; i < names.size(); i++) {
-            if (i < prices.size() && i < urls.size()) {
-                addProductCardToContainer(inflater, horizontalContainer, names.get(i), prices.get(i), urls.get(i));
-            }
+        for (Map.Entry<String, List<FirebaseHelper.Product>> entry : grouped.entrySet()) {
+            addHorizontalProductSection(inflater, entry.getKey(), entry.getValue());
         }
-
-        // 5. Add container to ScrollView, and ScrollView to main vertical layout
-        hScrollView.addView(horizontalContainer);
-        tableLayout.addView(hScrollView);
     }
 
-    private void addProductCardToContainer(LayoutInflater inflater, ViewGroup container, final String productName, double productPrice, final String imageUrl) {
-        // Inflate the product card layout (table_row_products.xml)
-        View productView = inflater.inflate(R.layout.table_row_products, container, false);
+    // ── Section & card builders ────────────────────────────────────────────────
 
-        final ImageView imageView = productView.findViewById(R.id.imageViewProduct);
+    private void addHorizontalProductSection(LayoutInflater inflater,
+                                             String title,
+                                             List<FirebaseHelper.Product> products) {
+        // Category title
+        TextView header = new TextView(getContext());
+        String display = title.replace('_', ' ').toLowerCase(Locale.ROOT);
+        display = Character.toUpperCase(display.charAt(0)) + display.substring(1);
+        header.setText(display);
+        header.setTextSize(20);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setTextColor(Color.parseColor("#1976D2"));
+        header.setPadding(16, 24, 16, 8);
+        tableLayout.addView(header);
 
-        // Determine the target size for the thumbnail (e.g., 100dp size in XML)
-        // NOTE: Requires a dimension resource: <dimen name="product_thumbnail_size">100dp</dimen>
-        final int thumbnailSize = (int) getResources().getDimension(R.dimen.product_thumbnail_size);
+        // Horizontal scroll row
+        HorizontalScrollView hScroll = new HorizontalScrollView(getContext());
+        hScroll.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        hScroll.setHorizontalScrollBarEnabled(false);
+        // Hardware layer on each row → GPU composited horizontal scroll.
+        hScroll.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+
+        LinearLayout row = new LinearLayout(getContext());
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(8, 0, 8, 0);
+
+        for (FirebaseHelper.Product p : products) {
+            addProductCard(inflater, row, p.name, p.price, p.imageUrl);
+        }
+
+        hScroll.addView(row);
+        tableLayout.addView(hScroll);
+    }
+
+    private void addProductCard(LayoutInflater inflater, ViewGroup container,
+                                String productName, double productPrice, String imageUrl) {
+        View card = inflater.inflate(R.layout.table_row_products, container, false);
+
+        final ImageView imageView = card.findViewById(R.id.imageViewProduct);
+        final int thumbSize = (int) getResources().getDimension(R.dimen.product_thumbnail_size);
 
         try {
-            // 💡 FIX: Explicitly resize the image to match the view's size.
-            // This is Priority 2 fix for fast image decoding and smooth scrolling.
             Picasso.get()
                     .load(imageUrl)
-                    .resize(thumbnailSize, thumbnailSize)
+                    .resize(thumbSize, thumbSize)
                     .centerCrop()
-                    .placeholder(createPlaceholderDrawable())
-                    .error(createErrorDrawable())
+                    .noFade()                         // skip cross-fade → saves GPU work
+                    .placeholder(placeholderDrawable())
+                    .error(errorDrawable())
                     .into(imageView);
         } catch (Exception e) {
             imageView.setBackgroundColor(Color.LTGRAY);
         }
 
-        TextView textViewName = productView.findViewById(R.id.textViewName);
-        textViewName.setText(productName);
+        ((TextView) card.findViewById(R.id.textViewName)).setText(productName);
+        ((TextView) card.findViewById(R.id.textViewPrice))
+                .setText(String.format(Locale.ROOT, "$%.2f", productPrice));
 
-        TextView textViewPrice = productView.findViewById(R.id.textViewPrice);
-        textViewPrice.setText(String.format("$%.2f", productPrice));
+        imageView.setOnClickListener(v -> showProductPopup(productName, imageUrl, productPrice));
+        setupQuantityControls(card, productName, productPrice);
 
-        imageView.setOnClickListener(v -> {
-            showProductDetailsPopup(productName, imageUrl);
-        });
-
-        // Setup quantity controls
-        setupQuantityControls(productView, productName, productPrice);
-
-        container.addView(productView);
+        container.addView(card);
     }
 
-    private void setupQuantityControls(View productView, String productName, double productPrice) {
-        TextView textViewCount = productView.findViewById(R.id.textViewCount);
-        Button minusButton = productView.findViewById(R.id.minusButton);
-        Button plusButton = productView.findViewById(R.id.plusButton);
-        Button buyButton = productView.findViewById(R.id.buyButton);
+    private void setupQuantityControls(View card, String productName, double productPrice) {
+        TextView counter  = card.findViewById(R.id.textViewCount);
+        Button minus      = card.findViewById(R.id.minusButton);
+        Button plus       = card.findViewById(R.id.plusButton);
+        Button buy        = card.findViewById(R.id.buyButton);
 
-        minusButton.setOnClickListener(v -> {
-            int count = Integer.parseInt(textViewCount.getText().toString());
-            if (count > 0) {
-                textViewCount.setText(String.valueOf(--count));
-            }
+        minus.setOnClickListener(v -> {
+            int n = Integer.parseInt(counter.getText().toString());
+            if (n > 0) counter.setText(String.valueOf(n - 1));
         });
 
-        plusButton.setOnClickListener(v -> {
-            int count = Integer.parseInt(textViewCount.getText().toString());
-            textViewCount.setText(String.valueOf(++count));
+        plus.setOnClickListener(v -> {
+            int n = Integer.parseInt(counter.getText().toString());
+            counter.setText(String.valueOf(n + 1));
         });
 
-        buyButton.setOnClickListener(v -> {
-            int count = Integer.parseInt(textViewCount.getText().toString());
-            if (count > 0) {
-                buyProduct(productName, productPrice, count);
-                textViewCount.setText("0"); // Reset count
+        buy.setOnClickListener(v -> {
+            int n = Integer.parseInt(counter.getText().toString());
+            if (n > 0) {
+                purchaseProduct(productName, productPrice, n);
+                counter.setText("0");
             } else {
                 showSnackbar("Please specify a quantity greater than zero");
             }
         });
     }
 
-    private void showProductDetailsPopup(String productName, String productImageUrl) {
+    // ── Popup ──────────────────────────────────────────────────────────────────
+
+    private void showProductPopup(String name, String imageUrl, double price) {
         if (getContext() == null || getView() == null) return;
 
-        // Fetch details again, but only for the price, as the image URL is reliable now.
-        String[] details = dbHelper.getProductDetailsByName(productName);
-
-        String productPriceString = (details != null && details.length > 0) ? details[0] : "0.00";
-
-        // 1. Inflate the popup layout (product_details_popup.xml)
         View popupView = getLayoutInflater().inflate(R.layout.product_details_popup, null);
 
-        // 2. Find popup views
-        TextView name = popupView.findViewById(R.id.textViewPopupName);
-        TextView price = popupView.findViewById(R.id.textViewPopupPrice);
-        ImageView image = popupView.findViewById(R.id.imageViewPopupProduct);
-        ImageButton closeButton = popupView.findViewById(R.id.btnClosePopup);
+        ((TextView) popupView.findViewById(R.id.textViewPopupName)).setText(name);
+        ((TextView) popupView.findViewById(R.id.textViewPopupPrice))
+                .setText(String.format(Locale.ROOT, "$%.2f", price));
 
-        // 3. Set product data
-        name.setText(productName);
-        try {
-            double priceValue = Double.parseDouble(productPriceString);
-            price.setText(String.format("$%.2f", priceValue));
-        } catch (NumberFormatException e) {
-            price.setText("$0.00"); // Safety fallback
-        }
-
-        // Load image into the popup using the reliable URL
+        ImageView img = popupView.findViewById(R.id.imageViewPopupProduct);
         try {
             Picasso.get()
-                    .load(productImageUrl)
-                    .placeholder(createPlaceholderDrawable())
-                    .error(createErrorDrawable())
+                    .load(imageUrl)
+                    .noFade()
+                    .placeholder(placeholderDrawable())
+                    .error(errorDrawable())
                     .fit()
                     .centerCrop()
-                    .into(image);
+                    .into(img);
         } catch (Exception e) {
-            image.setBackgroundColor(Color.LTGRAY);
+            img.setBackgroundColor(Color.LTGRAY);
         }
 
-        // 4. Create and show the PopupWindow
-        final PopupWindow popupWindow = new PopupWindow(
+        PopupWindow popup = new PopupWindow(
                 popupView,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                true
-        );
+                true);
+        popup.setElevation(100);
+        popup.setOutsideTouchable(true);
+        popup.setBackgroundDrawable(placeholderDrawable());
+        popup.showAtLocation(requireView(), Gravity.CENTER, 0, 0);
 
-        popupWindow.setElevation(100);
-        popupWindow.setOutsideTouchable(true);
-        // Need a background to handle outside touch dismissal correctly
-        popupWindow.setBackgroundDrawable(createPlaceholderDrawable());
-
-        // Show in the center of the fragment's root view
-        popupWindow.showAtLocation(requireView(), Gravity.CENTER, 0, 0);
-
-        // 5. Close button action
-        closeButton.setOnClickListener(v -> popupWindow.dismiss());
+        popupView.findViewById(R.id.btnClosePopup).setOnClickListener(v -> popup.dismiss());
     }
 
-    private int getCurrentUserId() {
-        if (getActivity() != null && getActivity() instanceof MainActivity) {
-            String username = ((MainActivity) getActivity()).getUsername();
-            // Assuming dbHelper is initialized in StoreFragment's onCreateView
-            return dbHelper.getUserId(username);
-        }
-        return -1;
-    }
+    // ── Purchase ───────────────────────────────────────────────────────────────
 
-    private void buyProduct(String productName, double productPrice, int quantity) {
-        int userId = getCurrentUserId();
-        if (userId == -1) {
+    private void purchaseProduct(String name, double price, int qty) {
+        if (fbHelper.getCurrentUserId() == null) {
             showSnackbar("Error: User session not found. Please log in.");
             return;
         }
+        fbHelper.addToCart(name, price, qty);
+        Toast.makeText(getContext(), qty + " × " + name + " added to cart!",
+                Toast.LENGTH_SHORT).show();
+    }
 
-        String orderTime = String.valueOf(System.currentTimeMillis());
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
-        // 💡 FIX: Move the database write operation to the background thread
-        executorService.execute(() -> {
-            boolean success = false;
-            for (int i = 0; i < quantity; i++) {
-                long orderId = dbHelper.insertOrder(productName, productPrice, orderTime, userId);
-                if (orderId != -1) {
-                    success = true;
-                }
-            }
-
-            final boolean finalSuccess = success;
-
-            // Update UI on main thread
-            mainHandler.post(() -> {
-                // 💡 FIX: Check if fragment is attached
-                if (!isAdded() || getContext() == null) return;
-
-                if (finalSuccess) {
-                    Toast.makeText(getContext(), quantity + " x " + productName + " added to orders!", Toast.LENGTH_SHORT).show();
-                } else {
-                    Toast.makeText(getContext(), "Failed to add products!", Toast.LENGTH_SHORT).show();
-                }
-            });
-        });
+    private void showProgress(boolean visible) {
+        progressBar.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private void showSnackbar(String message) {
@@ -490,26 +427,19 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    private Drawable createPlaceholderDrawable() {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setColor(Color.parseColor("#F5F5F5"));
-        drawable.setCornerRadius(16f);
-        return drawable;
+    private Drawable placeholderDrawable() {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.RECTANGLE);
+        d.setColor(Color.parseColor("#F5F5F5"));
+        d.setCornerRadius(16f);
+        return d;
     }
 
-    private Drawable createErrorDrawable() {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setShape(GradientDrawable.RECTANGLE);
-        drawable.setColor(Color.parseColor("#FFCDD2"));
-        drawable.setCornerRadius(16f);
-        return drawable;
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        executorService.shutdown();
-        mainHandler.removeCallbacksAndMessages(null);
+    private Drawable errorDrawable() {
+        GradientDrawable d = new GradientDrawable();
+        d.setShape(GradientDrawable.RECTANGLE);
+        d.setColor(Color.parseColor("#FFCDD2"));
+        d.setCornerRadius(16f);
+        return d;
     }
 }
