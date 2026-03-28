@@ -1,6 +1,7 @@
 package com.example.eyalproject;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
@@ -35,17 +36,29 @@ public class MainActivity extends AppCompatActivity {
     private NavController navController;
     private DBHelper dbHelper;
 
+    // 💡 FIX: Define SharedPreferences name for session persistence
+    private static final String PREFS_NAME = "AppPrefs";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
         // Retrieve the username passed from Login/RegisterActivity FIRST
-        // This is the only way MainActivity knows the user is logged in.
         username = getIntent().getStringExtra("USERNAME");
 
+        // 💡 FIX: Session Persistence using SharedPreferences
+        if (username == null) {
+            // App started without intent (e.g., from home screen), try to restore session
+            username = prefs.getString("USERNAME", null);
+        } else {
+            // Logged in via Intent (just typed password), save to session for next time
+            prefs.edit().putString("USERNAME", username).apply();
+        }
+
         // 💡 CRITICAL FIX: Session Check
-        // If no username is passed (e.g., app launched via notification without session context),
-        // redirect to the login/welcome screen immediately.
+        // If still no username (not passed via intent AND not saved in prefs), redirect
         if (username == null) {
             Intent welcomeIntent = new Intent(MainActivity.this, WelcomeActivity.class);
             // Flags ensure a clean break and prevent the back button from returning here
@@ -104,11 +117,11 @@ public class MainActivity extends AppCompatActivity {
 
                 // 2. CHECK: Only proceed if user is valid and cart is not empty
                 if (userId != -1) {
-                    // 💡 FIX: Pass userId to the DBHelper method
-                    List<String> orderNames = dbHelper.getAllOrderNames(userId);
+                    // 💡 FIX: Use a lightweight COUNT query instead of fetching all strings to the UI thread
+                    int cartCount = dbHelper.getCartItemCount(userId);
 
                     // Check if the cart is not empty before navigating
-                    if (orderNames.size() == 0) {
+                    if (cartCount == 0) {
                         // Show a custom toast message indicating that the cart is empty
                         LayoutInflater inflater = getLayoutInflater();
                         View layout = inflater.inflate(R.layout.toast_layout,
@@ -148,7 +161,9 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void logoutUser() {
-        // Clear any session data if you have
+        // 💡 FIX: Clear the SharedPreferences session on logout
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        prefs.edit().clear().apply();
 
         // Navigate back to WelcomeActivity
         Intent intent = new Intent(MainActivity.this, WelcomeActivity.class);

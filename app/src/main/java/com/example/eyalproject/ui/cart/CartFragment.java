@@ -63,6 +63,7 @@ public class CartFragment extends Fragment {
 
     private PopupWindow receiptPopup;        // Popup window for viewing the digital receipt.
     private AlertDialog paymentDialog;       // Dialog for entering payment details.
+    private PopupWindow historyPopup;        // 💡 FIX: Class-level variable to prevent window leaks.
 
     // 💡 Priority 1 Fix: Thread management fields for asynchronous DB operations
     // ExecutorService runs tasks in a background thread pool (single thread used here for serial DB access).
@@ -140,7 +141,10 @@ public class CartFragment extends Fragment {
         int userId = getCurrentUserId();
         if (userId == -1) {
             // If user is not logged in, show empty state immediately on the UI thread.
-            mainHandler.post(this::showEmptyCartState);
+            mainHandler.post(() -> {
+                if (!isAdded() || getContext() == null) return; // 💡 FIX: Attachment check
+                showEmptyCartState();
+            });
             return;
         }
 
@@ -154,6 +158,8 @@ public class CartFragment extends Fragment {
 
             // --- Post Result to Main Thread (UI Update) ---
             mainHandler.post(() -> {
+                if (!isAdded() || getContext() == null) return; // 💡 FIX: Attachment check
+
                 // Update UI based on fetched data.
                 displayOrdersUI(orderIds, orderNames, orderPrices);
                 updateTotalSumUI(totalSum);
@@ -344,16 +350,23 @@ public class CartFragment extends Fragment {
             boolean isReceiptSaved = dbHelper.insertReceipt(currentDate, totalSum, receipt, userId);
             dbHelper.deleteAllOrders(userId);
 
+            // 💡 FIX: Move File I/O to background thread if DB fails
+            final boolean finalIsReceiptSaved = isReceiptSaved;
+            if (!isReceiptSaved) {
+                saveReceiptToFile(receipt);
+            }
+
             // 2. UI Update and Next Steps
             mainHandler.post(() -> {
-                if (isReceiptSaved) {
+                if (!isAdded() || getContext() == null) return; // 💡 FIX: Check attachment
+
+                if (finalIsReceiptSaved) {
                     showReceiptPopup(receipt);
                     schedulePurchaseNotification(); // Schedule the notification after purchase
                     loadCartDataAsync(); // Reload cart asynchronously to refresh UI
                     showCustomToast("Purchase successful! History saved.", R.drawable.ic_store, R.color.success_color);
                 } else {
-                    saveReceiptToFile(receipt); // Fallback to saving as a file if DB save failed
-                    showCustomToast("Payment successful but failed to save history.",
+                    showCustomToast("Payment successful but failed to save history to DB. Saved to file.",
                             R.drawable.ic_store, R.color.error);
                 }
             });
@@ -455,6 +468,8 @@ public class CartFragment extends Fragment {
                 cartExecutor.execute(() -> {
                     boolean deletionSuccessful = dbHelper.deleteOrder(String.valueOf(orderId), userId);
                     mainHandler.post(() -> {
+                        if (!isAdded() || getContext() == null) return; // 💡 FIX: Check attachment
+
                         if (deletionSuccessful) {
                             showCustomToast("Item removed from cart", R.drawable.ic_store, R.color.success_color);
                             loadCartDataAsync(); // Reload the data asynchronously to refresh UI
@@ -523,7 +538,7 @@ public class CartFragment extends Fragment {
         }
 
         // 2. Create and show the PopupWindow
-        final PopupWindow historyPopup = new PopupWindow(
+        historyPopup = new PopupWindow( // 💡 FIX: use class-level variable
                 popupView,
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -654,14 +669,8 @@ public class CartFragment extends Fragment {
 
             long triggerTime = System.currentTimeMillis() + 5000; // Trigger in 5 seconds
 
-            // Set the alarm using different methods based on Android version for reliability
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
-            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
-            } else {
-                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
-            }
+            // 💡 FIX: Replaced exact alarms with standard alarm to prevent Android 14 crashes
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent);
         } catch (Exception e) {
             e.printStackTrace();
             showCustomToast("Purchase successful but failed to schedule notification", R.drawable.ic_store, R.color.info_color);
@@ -859,6 +868,10 @@ public class CartFragment extends Fragment {
         }
         if (paymentDialog != null && paymentDialog.isShowing()) {
             paymentDialog.dismiss();
+        }
+        // 💡 FIX: Dismiss history popup
+        if (historyPopup != null && historyPopup.isShowing()) {
+            historyPopup.dismiss();
         }
         // 💡 Priority 1 Fix: Shutdown ExecutorService to prevent memory leaks and threading issues
         cartExecutor.shutdown();

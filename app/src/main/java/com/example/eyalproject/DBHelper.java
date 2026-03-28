@@ -11,6 +11,7 @@ import android.util.Log;
 
 import com.example.eyalproject.ui.cart.CartReminderReceiver;
 
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -133,6 +134,25 @@ public class DBHelper extends SQLiteOpenHelper {
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_RECEIPTS);
         onCreate(db);
     }
+
+    // 💡 FIX: Helper method to hash passwords using SHA-256 for basic security
+    private String hashPassword(String password) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(password.getBytes("UTF-8"));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return password; // Fallback only if something goes horribly wrong
+        }
+    }
+
     // 💡 NEW: Save receipt data to history
     public boolean insertReceipt(String date, double totalPrice, String content, int userId) { // 💡 ADDED: userId
         SQLiteDatabase db = this.getWritableDatabase();
@@ -193,7 +213,7 @@ public class DBHelper extends SQLiteOpenHelper {
         }
         return history;
     }
-////////////////////////
+    ////////////////////////
     // User management methods
     public Boolean checkusername(String username) {
         SQLiteDatabase db = this.getReadableDatabase();
@@ -213,7 +233,8 @@ public class DBHelper extends SQLiteOpenHelper {
 
     public Boolean checkusernamepassword(String username, String password) {
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_USERS + " WHERE " + COL_USERNAME + "=? AND " + COL_PASSWORD + "=?", new String[]{username, password});
+        String hashedPass = hashPassword(password); // 💡 FIX: Hash entered password before checking
+        Cursor cursor = db.rawQuery("SELECT * FROM " + TABLE_USERS + " WHERE " + COL_USERNAME + "=? AND " + COL_PASSWORD + "=?", new String[]{username, hashedPass});
         boolean exists = cursor.getCount() > 0;
         cursor.close();
         return exists;
@@ -223,7 +244,7 @@ public class DBHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues contentValues = new ContentValues();
         contentValues.put(COL_USERNAME, username);
-        contentValues.put(COL_PASSWORD, password);
+        contentValues.put(COL_PASSWORD, hashPassword(password)); // 💡 FIX: Store hashed password, not plain text
         contentValues.put(COL_EMAIL, email);
         long result = db.insert(TABLE_USERS, null, contentValues);
         return result != -1;
@@ -660,19 +681,35 @@ public class DBHelper extends SQLiteOpenHelper {
         }
         return productNames;
     }
-//order methods
-public long insertOrder(String productName, double productPrice, String orderTime, int userId) { // 💡 ADDED: userId
-    SQLiteDatabase db = this.getWritableDatabase();
-    ContentValues values = new ContentValues();
-    values.put(COL_ORDER_PRODUCT_NAME, productName);
-    values.put(COL_ORDER_PRODUCT_PRICE, productPrice);
-    values.put(COL_ORDER_TIME, orderTime);
-    values.put(COL_USER_ID_FK_ORDER, userId); // 💡 INSERTED: userId
-    long id = db.insert(TABLE_ORDERS, null, values);
-    db.close();
-    return id;
-}
-public double calculateTotalOrderSum(int userId) { // 💡 ADDED: userId
+    //order methods
+    public long insertOrder(String productName, double productPrice, String orderTime, int userId) { // 💡 ADDED: userId
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COL_ORDER_PRODUCT_NAME, productName);
+        values.put(COL_ORDER_PRODUCT_PRICE, productPrice);
+        values.put(COL_ORDER_TIME, orderTime);
+        values.put(COL_USER_ID_FK_ORDER, userId); // 💡 INSERTED: userId
+        long id = db.insert(TABLE_ORDERS, null, values);
+        db.close();
+        return id;
+    }
+
+    // 💡 FIX: Lightweight method to count items without loading massive data into the UI thread
+    public int getCartItemCount(int userId) {
+        SQLiteDatabase db = this.getReadableDatabase();
+        Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + TABLE_ORDERS +
+                " WHERE " + COL_USER_ID_FK_ORDER + " = ?", new String[]{String.valueOf(userId)});
+        int count = 0;
+        if (cursor != null) {
+            if (cursor.moveToFirst()) {
+                count = cursor.getInt(0);
+            }
+            cursor.close();
+        }
+        return count;
+    }
+
+    public double calculateTotalOrderSum(int userId) { // 💡 ADDED: userId
         double totalSum = 0.0;
         SQLiteDatabase db = this.getReadableDatabase();
         // 💡 FILTERED: Filtered query using WHERE USER_ID_FK = ?

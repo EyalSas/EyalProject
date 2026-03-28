@@ -145,6 +145,9 @@ public class StoreFragment extends Fragment {
                 List<String> productTypes = getProductTypesToLoad();
 
                 mainHandler.post(() -> {
+                    // 💡 FIX: Check if fragment is still attached
+                    if (!isAdded() || getContext() == null) return;
+
                     // First load 2 products per category for quick display
                     loadLimitedProducts(productTypes, 2);
                     progressBar.setVisibility(View.GONE);
@@ -156,6 +159,9 @@ public class StoreFragment extends Fragment {
             } catch (Exception e) {
                 e.printStackTrace();
                 mainHandler.post(() -> {
+                    // 💡 FIX: Check if fragment is still attached
+                    if (!isAdded() || getContext() == null) return;
+
                     progressBar.setVisibility(View.GONE);
                     showSnackbar("Error loading products");
                 });
@@ -208,6 +214,8 @@ public class StoreFragment extends Fragment {
 
                         // Update the UI on main thread
                         mainHandler.post(() -> {
+                            // 💡 FIX: Check if fragment is attached
+                            if (!isAdded() || getContext() == null) return;
                             addProductsToExistingCategory(productType, remainingProductNames, remainingProductPrices, remainingProductImageUrls);
                         });
 
@@ -222,12 +230,12 @@ public class StoreFragment extends Fragment {
     }
 
     private void addProductsToExistingCategory(String productType, List<String> names, List<Double> prices, List<String> urls) {
-        if (getContext() == null) return;
+        // 💡 FIX: Empty check to prevent StringIndexOutOfBoundsException
+        if (getContext() == null || productType == null || productType.isEmpty()) return;
 
         // Find the existing HorizontalScrollView for this category
         String searchTitle = productType.replace('_', ' ').toLowerCase(Locale.ROOT);
         searchTitle = searchTitle.substring(0, 1).toUpperCase(Locale.ROOT) + searchTitle.substring(1);
-
 
         for (int i = 0; i < tableLayout.getChildCount(); i++) {
             View child = tableLayout.getChildAt(i);
@@ -341,6 +349,7 @@ public class StoreFragment extends Fragment {
 
         container.addView(productView);
     }
+
     private void setupQuantityControls(View productView, String productName, double productPrice) {
         TextView textViewCount = productView.findViewById(R.id.textViewCount);
         Button minusButton = productView.findViewById(R.id.minusButton);
@@ -437,6 +446,7 @@ public class StoreFragment extends Fragment {
         }
         return -1;
     }
+
     private void buyProduct(String productName, double productPrice, int quantity) {
         int userId = getCurrentUserId();
         if (userId == -1) {
@@ -460,6 +470,9 @@ public class StoreFragment extends Fragment {
 
             // Update UI on main thread
             mainHandler.post(() -> {
+                // 💡 FIX: Check if fragment is attached
+                if (!isAdded() || getContext() == null) return;
+
                 if (finalSuccess) {
                     Toast.makeText(getContext(), quantity + " x " + productName + " added to orders!", Toast.LENGTH_SHORT).show();
                 } else {
@@ -467,7 +480,9 @@ public class StoreFragment extends Fragment {
                 }
             });
         });
-    }    private void showSnackbar(String message) {
+    }
+
+    private void showSnackbar(String message) {
         if (getView() != null) {
             Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
                     .setAction("OK", v -> {})
