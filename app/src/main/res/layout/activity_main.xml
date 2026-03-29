@@ -6,69 +6,94 @@
     android:id="@+id/container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingTop="0dp"
-    android:background="@drawable/background">
+    android:background="#F0F4F8">
 
-    <!-- Header with user info and search -->
+    <!-- ── Top header bar (navy, same as all auth screens) ──────── -->
     <LinearLayout
         android:id="@+id/header_layout"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
+        android:layout_width="0dp"
+        android:layout_height="64dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingHorizontal="16dp"
-        android:background="@drawable/header_gradient"
+        android:paddingStart="20dp"
+        android:paddingEnd="16dp"
+        android:background="#0D2B4E"
+        android:elevation="4dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- Thin accent line on the left edge -->
+        <View
+            android:layout_width="3dp"
+            android:layout_height="28dp"
+            android:background="#1A5F9E"
+            android:layout_marginEnd="12dp" />
+
+        <!-- Welcome text -->
         <TextView
             android:id="@+id/usernameTextView"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Welcome, Player!"
-            android:textColor="@color/white"
-            android:textSize="18sp"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
             android:textStyle="bold"
+            android:letterSpacing="0.01"
+            android:fontFamily="sans-serif-medium"
             tools:text="Welcome, Alex!" />
 
+        <!-- Profile icon — circle badge style -->
         <ImageView
             android:id="@+id/user_profile_image"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
             android:src="@drawable/profileicon"
             android:contentDescription="User Profile"
-            android:layout_marginStart="16dp" />
+            android:background="@drawable/profile_icon_background"
+            android:padding="6dp"
+            android:layout_marginStart="12dp" />
 
     </LinearLayout>
 
-    <!-- Bottom Navigation View -->
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/nav_view"
+    <!-- ── Thin navy accent divider under header ────────────────── -->
+    <View
+        android:id="@+id/header_divider"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="0dp"
-        android:layout_marginEnd="0dp"
-        app:itemIconTint="@drawable/bottom_nav_color_selector"
-        app:itemTextColor="@drawable/bottom_nav_color_selector"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        android:background="@drawable/header_gradient"
-        app:menu="@menu/bottom_nav_menu"/>
+        android:layout_height="2dp"
+        android:background="#1A5F9E"
+        app:layout_constraintTop_toBottomOf="@id/header_layout"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- NavHostFragment -->
+    <!-- ── NavHostFragment — fills between header and nav bar ───── -->
     <fragment
         android:id="@+id/nav_host_fragment_activity_main"
         android:name="androidx.navigation.fragment.NavHostFragment"
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:defaultNavHost="true"
-        app:layout_constraintTop_toBottomOf="@id/header_layout"
+        app:layout_constraintTop_toBottomOf="@id/header_divider"
         app:layout_constraintBottom_toTopOf="@id/nav_view"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        app:navGraph="@navigation/mobile_navigation"/>
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:navGraph="@navigation/mobile_navigation" />
+
+    <!-- ── Bottom Navigation — navy background, consistent with header ── -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/nav_view"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:background="#0D2B4E"
+        android:elevation="8dp"
+        app:itemIconTint="@drawable/bottom_nav_color_selector"
+        app:itemTextColor="@drawable/bottom_nav_color_selector"
+        app:itemRippleColor="#1A5F9E"
+        app:labelVisibilityMode="labeled"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:menu="@menu/bottom_nav_menu" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

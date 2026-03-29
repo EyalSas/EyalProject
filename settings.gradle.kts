@@ -14,6 +14,6 @@ dependencyResolutionManagement {
 }
 
 
-rootProject.name = "EyalProject"
+rootProject.name = "GameZone"
 include(":app")
  
