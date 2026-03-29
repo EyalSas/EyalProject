@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+
+<!-- Root scroll container to support smaller screens -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -8,12 +10,13 @@
     android:fillViewport="true"
     tools:context=".RegisterActivity">
 
+    <!-- Main layout using ConstraintLayout for flexible positioning -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="24dp">
 
-        <!-- App Logo -->
+        <!-- Application logo centered at the top -->
         <ImageView
             android:id="@+id/logoImage"
             android:layout_width="120dp"
@@ -25,7 +28,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <!-- Username -->
+        <!-- Username input field -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/usernameLayout"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -47,7 +50,7 @@
                 android:textColorHint="#757575" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Email -->
+        <!-- Email input field -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/emailLayout"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -69,7 +72,7 @@
                 android:textColorHint="#757575" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Password -->
+        <!-- Password input with visibility toggle -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/passwordLayout"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -92,7 +95,7 @@
                 android:textColorHint="#757575" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Confirm Password -->
+        <!-- Confirm password input -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/repasswordLayout"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
@@ -115,10 +118,7 @@
                 android:textColorHint="#757575" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!--
-            ✅ FIX: ProgressBar was previously constrained to repasswordLayout but overlapping
-            the Sign Up button. Now it sits between them, centered, and appears only when loading.
-        -->
+        <!-- Loading indicator shown during registration process -->
         <ProgressBar
             android:id="@+id/registerProgress"
             android:layout_width="48dp"
@@ -130,7 +130,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <!-- Create Account button — constrained below ProgressBar so it never overlaps -->
+        <!-- Button to submit registration form -->
         <Button
             android:id="@+id/btnsignup"
             android:layout_width="0dp"
@@ -146,7 +146,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <!-- Already have an account? -->
+        <!-- Navigation button to login screen -->
         <Button
             android:id="@+id/buttonLogin"
             android:layout_width="wrap_content"

@@ -18,7 +18,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.HorizontalScrollView;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
@@ -52,6 +51,9 @@ public class StoreFragment extends Fragment {
     private TextInputEditText editTextSearch;
     private ProgressBar progressBar;
     private NestedScrollView nestedScrollView;
+
+    // ✅ FIX: Track active popup to prevent WindowLeaked exceptions
+    private PopupWindow activePopupWindow;
 
     // ── State ──────────────────────────────────────────────────────────────────
     private String selectedFilter = "All";
@@ -100,6 +102,12 @@ public class StoreFragment extends Fragment {
         mainHandler.removeCallbacksAndMessages(null);
         filterHandler.removeCallbacksAndMessages(null);
         filterThread.quitSafely();
+
+        // ✅ FIX: Safely dismiss popup to prevent WindowLeaked exceptions on rotation/navigation
+        if (activePopupWindow != null && activePopupWindow.isShowing()) {
+            activePopupWindow.dismiss();
+            activePopupWindow = null;
+        }
     }
 
     // ── Init helpers ───────────────────────────────────────────────────────────
@@ -343,17 +351,17 @@ public class StoreFragment extends Fragment {
         Button buy        = card.findViewById(R.id.buyButton);
 
         minus.setOnClickListener(v -> {
-            int n = Integer.parseInt(counter.getText().toString());
+            int n = getSafeQuantity(counter);
             if (n > 0) counter.setText(String.valueOf(n - 1));
         });
 
         plus.setOnClickListener(v -> {
-            int n = Integer.parseInt(counter.getText().toString());
+            int n = getSafeQuantity(counter);
             counter.setText(String.valueOf(n + 1));
         });
 
         buy.setOnClickListener(v -> {
-            int n = Integer.parseInt(counter.getText().toString());
+            int n = getSafeQuantity(counter);
             if (n > 0) {
                 purchaseProduct(productName, productPrice, n);
                 counter.setText("0");
@@ -363,10 +371,24 @@ public class StoreFragment extends Fragment {
         });
     }
 
+    // ✅ FIX: Safely parse integer to prevent NumberFormatException crashes
+    private int getSafeQuantity(TextView counter) {
+        try {
+            return Integer.parseInt(counter.getText().toString().trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     // ── Popup ──────────────────────────────────────────────────────────────────
 
     private void showProductPopup(String name, String imageUrl, double price) {
         if (getContext() == null || getView() == null) return;
+
+        // Dismiss existing popup if still lingering
+        if (activePopupWindow != null && activePopupWindow.isShowing()) {
+            activePopupWindow.dismiss();
+        }
 
         View popupView = getLayoutInflater().inflate(R.layout.product_details_popup, null);
 
@@ -388,17 +410,17 @@ public class StoreFragment extends Fragment {
             img.setBackgroundColor(Color.LTGRAY);
         }
 
-        PopupWindow popup = new PopupWindow(
+        activePopupWindow = new PopupWindow(
                 popupView,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 true);
-        popup.setElevation(100);
-        popup.setOutsideTouchable(true);
-        popup.setBackgroundDrawable(placeholderDrawable());
-        popup.showAtLocation(requireView(), Gravity.CENTER, 0, 0);
+        activePopupWindow.setElevation(100);
+        activePopupWindow.setOutsideTouchable(true);
+        activePopupWindow.setBackgroundDrawable(placeholderDrawable());
+        activePopupWindow.showAtLocation(requireView(), Gravity.CENTER, 0, 0);
 
-        popupView.findViewById(R.id.btnClosePopup).setOnClickListener(v -> popup.dismiss());
+        popupView.findViewById(R.id.btnClosePopup).setOnClickListener(v -> activePopupWindow.dismiss());
     }
 
     // ── Purchase ───────────────────────────────────────────────────────────────

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Layout for the Purchase History screen -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -9,6 +11,7 @@
     android:clickable="true"
     android:focusable="true">
 
+    <!-- Screen title -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -19,6 +22,7 @@
         android:textColor="@color/primary_dark"
         android:layout_marginBottom="16dp" />
 
+    <!-- Scrollable container for purchase history items -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -27,6 +31,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textViewReceipt">
 
+        <!-- Container that holds individual history entries dynamically -->
         <LinearLayout
             android:id="@+id/historyPopupContainer"
             android:layout_width="match_parent"
@@ -38,6 +43,7 @@
 
     </androidx.core.widget.NestedScrollView>
 
+    <!-- Button to close the history screen -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnCloseHistory"
         android:layout_width="match_parent"

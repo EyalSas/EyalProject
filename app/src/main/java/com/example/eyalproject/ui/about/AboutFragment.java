@@ -1,12 +1,9 @@
 package com.example.eyalproject.ui.about;
 
-import android.content.Intent;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -22,7 +19,6 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.ArrayList;
@@ -31,35 +27,44 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Fragment responsible for displaying information about the company's physical stores.
- * It provides two views: a list (RecyclerView) and an interactive Google Map (MapView),
- * allowing the user to toggle between them.
+ * Fragment that displays company store locations using two modes:
+ * a list view (RecyclerView) and a map view (Google Map).
+ * The user can switch between these views using a floating action button.
  */
 public class AboutFragment extends Fragment implements OnMapReadyCallback {
 
-    private MapView mapView;           // View container for the Google Map.
-    private GoogleMap googleMap;       // The actual Google Map object.
-    private RecyclerView storesRecyclerView; // List view to display store details.
-    private FloatingActionButton toggleFab; // Button to switch between map and list views.
+    // Google Map container and instance
+    private MapView mapView;
+    private GoogleMap googleMap;
 
-    private List<Place> gameStores;    // List of Place models (stores).
-    private StoreAdapter storeAdapter; // Adapter for the RecyclerView.
-    private boolean showingMap = false; // State flag: true if map is visible, false if list is visible.
+    // UI components
+    private RecyclerView storesRecyclerView;
+    private FloatingActionButton toggleFab;
 
-    // Map to link a Place's ID to its corresponding Google Maps Marker object.
+    // Data and adapter
+    private List<Place> gameStores;
+    private StoreAdapter storeAdapter;
+
+    // State flag to determine which view is currently displayed
+    private boolean showingMap = false;
+
+    // Maps store IDs to their corresponding markers on the map
     private Map<String, Marker> markerMap = new HashMap<>();
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        // Inflate the fragment layout
         View rootView = inflater.inflate(R.layout.fragment_about, container, false);
 
+        // Initialize UI components and data
         initializeViews(rootView);
         initializeGameStores();
         setupRecyclerView();
 
+        // Set click listener to toggle between list and map views
         toggleFab.setOnClickListener(v -> toggleView());
 
-        // Important for MapView lifecycle: MUST be called in onCreateView.
+        // Initialize MapView lifecycle and request map asynchronously
         if (mapView != null) {
             mapView.onCreate(savedInstanceState);
             mapView.getMapAsync(this);
@@ -68,12 +73,18 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         return rootView;
     }
 
+    /**
+     * Binds UI elements from the layout to class variables.
+     */
     private void initializeViews(View rootView) {
         mapView = rootView.findViewById(R.id.mapView);
         storesRecyclerView = rootView.findViewById(R.id.storesRecyclerView);
         toggleFab = rootView.findViewById(R.id.toggleFab);
     }
 
+    /**
+     * Initializes a static list of store locations.
+     */
     private void initializeGameStores() {
         gameStores = new ArrayList<>();
         gameStores.add(new Place(1L, "GameZone Jerusalem", 31.7683, 35.2137, "+972-2-500-1001", "Jaffa St 123, Jerusalem"));
@@ -88,30 +99,47 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         gameStores.add(new Place(10L, "GameZone Eilat", 29.5577, 34.9519, "+972-8-500-1010", "HaTmarim Blvd 34, Eilat"));
     }
 
+    /**
+     * Configures the RecyclerView with a layout manager and adapter.
+     */
     private void setupRecyclerView() {
         storesRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         storeAdapter = new StoreAdapter(gameStores, store -> focusOnStore(store));
         storesRecyclerView.setAdapter(storeAdapter);
     }
 
+    /**
+     * Callback triggered when the Google Map is ready to be used.
+     */
     @Override
     public void onMapReady(GoogleMap googleMap) {
         this.googleMap = googleMap;
+
+        // Configure map settings
         googleMap.getUiSettings().setZoomControlsEnabled(true);
         googleMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
+
+        // Add markers for all stores
         addStoreMarkers();
 
+        // Move camera to a default location (center of Israel)
         if (!gameStores.isEmpty()) {
             LatLng israelCenter = new LatLng(32.0853, 34.7818);
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(israelCenter, 8));
         }
     }
 
+    /**
+     * Adds markers to the map for each store location.
+     */
     private void addStoreMarkers() {
         if (googleMap == null) return;
+
         markerMap.clear();
+
         for (Place store : gameStores) {
             LatLng storeLocation = new LatLng(store.getLatitude(), store.getLongitude());
+
             Marker marker = googleMap.addMarker(new MarkerOptions()
                     .position(storeLocation)
                     .title(store.getName())
@@ -121,27 +149,31 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
+    /**
+     * Toggles between map view and list view.
+     */
     private void toggleView() {
         showingMap = !showingMap;
+
         if (showingMap) {
-            // Show map, hide list
             mapView.setVisibility(View.VISIBLE);
             storesRecyclerView.setVisibility(View.GONE);
-            // 💡 FIX: Set icon to 'list' so user knows tapping it goes back to the list
             toggleFab.setImageResource(R.drawable.ic_store);
         } else {
-            // Show list, hide map
             mapView.setVisibility(View.GONE);
             storesRecyclerView.setVisibility(View.VISIBLE);
-            // 💡 FIX: Assuming you have a map icon or default dashboard icon.
             toggleFab.setImageResource(android.R.drawable.ic_dialog_map);
         }
     }
 
+    /**
+     * Focuses the map camera on a selected store and shows its marker info.
+     */
     private void focusOnStore(Place store) {
         if (!showingMap) {
             toggleView();
         }
+
         LatLng storeLocation = new LatLng(store.getLatitude(), store.getLongitude());
         googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(storeLocation, 15f), 1000, null);
 
@@ -151,7 +183,9 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
-    // --- 💡 FIX: Complete MapView Lifecycle Methods to prevent memory leaks ---
+    /**
+     * MapView lifecycle handling to prevent memory leaks.
+     */
     @Override
     public void onStart() {
         super.onStart();
@@ -179,7 +213,6 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // 💡 FIX: Destroy map here when Fragment's view is destroyed to free memory
         if (mapView != null) mapView.onDestroy();
     }
 
@@ -187,77 +220,5 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     public void onLowMemory() {
         super.onLowMemory();
         if (mapView != null) mapView.onLowMemory();
-    }
-}
-
-// --- RecyclerView Adapter and ViewHolder ---
-
-class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHolder> {
-
-    private final List<Place> stores;
-    private final OnStoreClickListener listener;
-
-    public interface OnStoreClickListener {
-        void onStoreClick(Place store);
-    }
-
-    public StoreAdapter(List<Place> stores, OnStoreClickListener listener) {
-        this.stores = stores;
-        this.listener = listener;
-    }
-
-    @NonNull
-    @Override
-    public StoreViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.list_item_store, parent, false);
-        return new StoreViewHolder(view);
-    }
-
-    @Override
-    public void onBindViewHolder(@NonNull StoreViewHolder holder, int position) {
-        Place store = stores.get(position);
-        holder.bind(store, listener);
-    }
-
-    @Override
-    public int getItemCount() {
-        return stores.size();
-    }
-
-    static class StoreViewHolder extends RecyclerView.ViewHolder {
-        TextView storeName, storeAddress, storePhone;
-        MaterialButton callButton, directionsButton;
-
-        public StoreViewHolder(@NonNull View itemView) {
-            super(itemView);
-            storeName = itemView.findViewById(R.id.storeName);
-            storeAddress = itemView.findViewById(R.id.storeAddress);
-            storePhone = itemView.findViewById(R.id.storePhone);
-            callButton = itemView.findViewById(R.id.callButton);
-            directionsButton = itemView.findViewById(R.id.directionsButton);
-        }
-
-        public void bind(final Place store, final OnStoreClickListener listener) {
-            storeName.setText(store.getName());
-            storeAddress.setText(store.getAddress());
-            storePhone.setText(store.getPhoneNumber());
-
-            itemView.setOnClickListener(v -> listener.onStoreClick(store));
-
-            callButton.setOnClickListener(v -> {
-                Intent intent = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + store.getPhoneNumber()));
-                itemView.getContext().startActivity(intent);
-            });
-
-            directionsButton.setOnClickListener(v -> {
-                Uri gmmIntentUri = Uri.parse("geo:0,0?q=" + store.getLatitude() + "," + store.getLongitude() + "(" + Uri.encode(store.getName()) + ")");
-                Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
-                mapIntent.setPackage("com.google.android.apps.maps");
-
-                if (mapIntent.resolveActivity(itemView.getContext().getPackageManager()) != null) {
-                    itemView.getContext().startActivity(mapIntent);
-                }
-            });
-        }
     }
 }

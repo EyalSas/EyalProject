@@ -34,8 +34,7 @@ public class ServiceFragment extends Fragment {
     private FragmentServiceBinding binding;
     private String username;
 
-    private static final String ADMIN_USERNAME = "or";
-
+    private static final String ADMIN_USERNAME = "admin";
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         binding = FragmentServiceBinding.inflate(inflater, container, false);

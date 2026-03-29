@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -35,6 +36,9 @@ public class MainActivity extends AppCompatActivity {
     private NavController navController;
 
     private FirebaseHelper fbHelper;
+
+    // ✅ FIX: Track active popup to prevent WindowLeaked exceptions
+    private PopupWindow profilePopupWindow;
 
     private static final String PREFS_NAME = "AppPrefs";
 
@@ -92,7 +96,8 @@ public class MainActivity extends AppCompatActivity {
 
         navView.getMenu().findItem(R.id.navigation_cart).setVisible(true);
 
-        navView.setOnNavigationItemSelectedListener(item -> {
+        // ✅ FIX: Replaced deprecated setOnNavigationItemSelectedListener with setOnItemSelectedListener
+        navView.setOnItemSelectedListener(item -> {
             int itemId = item.getItemId();
             if (itemId == R.id.navigation_cart) {
 
@@ -164,6 +169,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showProfileDialog() {
+        // Dismiss existing popup if still lingering
+        if (profilePopupWindow != null && profilePopupWindow.isShowing()) {
+            profilePopupWindow.dismiss();
+        }
+
         View dropdownView = getLayoutInflater().inflate(R.layout.profile_dropdown, null);
 
         TextView tvUsername = dropdownView.findViewById(R.id.tvDropdownUsername);
@@ -173,24 +183,28 @@ public class MainActivity extends AppCompatActivity {
         tvUsername.setText(username);
         tvEmail.setText(email != null ? email : "Not available");
 
-        PopupWindow popupWindow = new PopupWindow(
+        profilePopupWindow = new PopupWindow(
                 dropdownView,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 true
         );
 
-        popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        popupWindow.setElevation(16f);
-        popupWindow.setAnimationStyle(android.R.style.Animation_Dialog);
+        profilePopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        profilePopupWindow.setElevation(16f);
+        profilePopupWindow.setAnimationStyle(android.R.style.Animation_Dialog);
 
         ImageView profileIcon = findViewById(R.id.user_profile_image);
-        popupWindow.showAsDropDown(profileIcon, -180, 10);
+
+        // ✅ FIX: Use dynamic DP instead of raw hardcoded pixels (-180, 10) for device consistency
+        int xOffset = dpToPx(-60);
+        int yOffset = dpToPx(4);
+        profilePopupWindow.showAsDropDown(profileIcon, xOffset, yOffset);
 
         btnLogout.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                popupWindow.dismiss();
+                profilePopupWindow.dismiss();
                 logoutUser();
             }
         });
@@ -199,7 +213,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 if (event.getAction() == MotionEvent.ACTION_OUTSIDE) {
-                    popupWindow.dismiss();
+                    profilePopupWindow.dismiss();
                     return true;
                 }
                 return false;
@@ -207,10 +221,22 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // ✅ FIX: Helper method to convert DP to Pixels dynamically
+    private int dpToPx(int dp) {
+        return (int) TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, dp, getResources().getDisplayMetrics());
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
         binding = null;
+
+        // ✅ FIX: Safely dismiss popup to prevent WindowLeaked exceptions on rotation/navigation
+        if (profilePopupWindow != null && profilePopupWindow.isShowing()) {
+            profilePopupWindow.dismiss();
+            profilePopupWindow = null;
+        }
     }
 
     private void migrateProductsToFirebase() {

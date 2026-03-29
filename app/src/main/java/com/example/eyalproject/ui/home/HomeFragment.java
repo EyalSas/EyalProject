@@ -378,6 +378,7 @@ public class HomeFragment extends Fragment {
                 .limit(10)
                 .get()
                 .addOnSuccessListener(querySnapshot -> {
+                    if (!isAdded() || getView() == null) return;
                     if (querySnapshot.isEmpty()) {
                         showSimpleToast("No products available to display.");
                         return;
