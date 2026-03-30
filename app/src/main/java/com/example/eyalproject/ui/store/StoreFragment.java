@@ -6,7 +6,6 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -45,38 +44,36 @@ import java.util.Map;
 public class StoreFragment extends Fragment {
 
     // ── Views ──────────────────────────────────────────────────────────────────
-    private FirebaseHelper fbHelper;
     private LinearLayout tableLayout;
     private Spinner spinnerFilter;
     private TextInputEditText editTextSearch;
     private ProgressBar progressBar;
-    private NestedScrollView nestedScrollView;
-
-    // ✅ FIX: Track active popup to prevent WindowLeaked exceptions
     private PopupWindow activePopupWindow;
 
     // ── State ──────────────────────────────────────────────────────────────────
     private String selectedFilter = "All";
     private String currentSearchQuery = "";
 
-    /** Raw product list from the last Firebase fetch — never re-fetched unless filter changes. */
-    private List<FirebaseHelper.Product> cachedProducts = null;
-    /** Which filter value the cache belongs to. */
-    private String cachedFilterKey = null;
+    // ── App-level cache: survives fragment destroy/recreate ────────────────────
+    // Keyed by filter string → list of products. Never wiped unless data changes.
+    private static final Map<String, List<FirebaseHelper.Product>> productCache = new LinkedHashMap<>();
+
+    // Shared FirebaseHelper — one Firestore connection for the whole app session.
+    private static FirebaseHelper fbHelper;
 
     // ── Threading ──────────────────────────────────────────────────────────────
-    /** Posts UI updates — always the main thread. */
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    /**
-     * Dedicated background thread for filtering + grouping work.
-     * Keeps the main thread completely free during search.
-     */
-    private HandlerThread filterThread;
-    private Handler filterHandler;
+    // Debounce runnable for search — runs on main thread since filtering is fast
+    // (just iterating an in-memory list; no I/O involved).
+    private final Runnable searchRunnable = () -> {
+        List<FirebaseHelper.Product> cached = productCache.get(selectedFilter);
+        if (cached != null) filterAndRender(cached);
+    };
 
-    /** Debounce runnable: re-scheduled on every keystroke, fires 300 ms after the last one. */
-    private final Runnable searchRunnable = () -> filterAndRender(cachedProducts);
+    // ── Drawables cached once per fragment instance ────────────────────────────
+    private Drawable placeholder;
+    private Drawable error;
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -85,12 +82,17 @@ public class StoreFragment extends Fragment {
                              ViewGroup container, Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_store, container, false);
 
-        fbHelper = new FirebaseHelper();
-        startFilterThread();
+        // Create FirebaseHelper only once for the whole app session
+        if (fbHelper == null) fbHelper = new FirebaseHelper();
+
+        // Pre-build drawables once; reuse everywhere in this fragment
+        placeholder = buildDrawable("#F5F5F5");
+        error       = buildDrawable("#FFCDD2");
+
         initViews(root);
         setupSpinner();
         setupSearch();
-        fetchProducts();
+        loadProducts();
 
         return root;
     }
@@ -98,35 +100,22 @@ public class StoreFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        // Cancel every pending callback so nothing fires on a detached fragment.
+        // Cancel any pending debounce or delayed renders
         mainHandler.removeCallbacksAndMessages(null);
-        filterHandler.removeCallbacksAndMessages(null);
-        filterThread.quitSafely();
 
-        // ✅ FIX: Safely dismiss popup to prevent WindowLeaked exceptions on rotation/navigation
         if (activePopupWindow != null && activePopupWindow.isShowing()) {
             activePopupWindow.dismiss();
             activePopupWindow = null;
         }
     }
 
-    // ── Init helpers ───────────────────────────────────────────────────────────
-
-    private void startFilterThread() {
-        filterThread = new HandlerThread("StoreFilterThread");
-        filterThread.start();
-        filterHandler = new Handler(filterThread.getLooper());
-    }
+    // ── Init ───────────────────────────────────────────────────────────────────
 
     private void initViews(View root) {
         tableLayout    = root.findViewById(R.id.tableLayout);
         spinnerFilter  = root.findViewById(R.id.spinnerFilter);
         editTextSearch = root.findViewById(R.id.editTextSearch);
         progressBar    = root.findViewById(R.id.progressBar);
-        nestedScrollView = root.findViewById(R.id.nestedScrollView);
-
-        // Hardware layer lets the GPU composite the scroll surface — smoother flings.
-        nestedScrollView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
     }
 
     private void setupSpinner() {
@@ -147,12 +136,9 @@ public class StoreFragment extends Fragment {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
                 String newFilter = parent.getItemAtPosition(pos).toString();
-                if (newFilter.equals(selectedFilter)) return; // no-op if nothing changed
+                if (newFilter.equals(selectedFilter)) return;
                 selectedFilter = newFilter;
-                // Invalidate cache — next fetchProducts() will hit Firebase.
-                cachedProducts  = null;
-                cachedFilterKey = null;
-                fetchProducts();
+                loadProducts();
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
@@ -166,44 +152,40 @@ public class StoreFragment extends Fragment {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 currentSearchQuery = s.toString().trim().toLowerCase(Locale.ROOT);
-
-                // Debounce: cancel previous pending search, schedule a new one.
-                filterHandler.removeCallbacks(searchRunnable);
-
-                if (cachedProducts != null) {
-                    // Products already loaded — filter locally, no network call.
-                    filterHandler.postDelayed(searchRunnable, 300);
+                mainHandler.removeCallbacks(searchRunnable);
+                // Only debounce if data is already loaded; fires after 200 ms of typing pause
+                if (productCache.containsKey(selectedFilter)) {
+                    mainHandler.postDelayed(searchRunnable, 200);
                 }
-                // If cache is empty a fetch is already in-flight; the callback will call
-                // filterAndRender() with the correct query when it arrives.
             }
         });
     }
 
-    // ── Data loading ───────────────────────────────────────────────────────────
+    // ── Data ───────────────────────────────────────────────────────────────────
 
-    /**
-     * Hits Firebase only when the cache is stale (filter changed or first load).
-     * Otherwise jumps straight to filterAndRender() on the background thread.
-     */
-    private void fetchProducts() {
-        if (cachedProducts != null && selectedFilter.equals(cachedFilterKey)) {
-            // Cache is warm — skip the network entirely.
-            filterHandler.post(() -> filterAndRender(cachedProducts));
+    private void loadProducts() {
+        // ✅ INSTANT: If we already have data for this filter, render immediately with no spinner
+        List<FirebaseHelper.Product> cached = productCache.get(selectedFilter);
+        if (cached != null) {
+            filterAndRender(cached);
             return;
         }
 
+        // ── First time for this filter: fetch from Firebase ──────────────────
         showProgress(true);
 
         FirebaseHelper.ProductsCallback callback = new FirebaseHelper.ProductsCallback() {
             @Override
             public void onProductsLoaded(List<FirebaseHelper.Product> products) {
                 if (!isAdded()) return;
-                cachedProducts  = products;
-                cachedFilterKey = selectedFilter;
-                // Hand off to background thread immediately.
-                filterHandler.post(() -> filterAndRender(products));
+                // Store permanently; will never be re-fetched unless the app process dies
+                productCache.put(selectedFilter, products);
+                mainHandler.post(() -> {
+                    showProgress(false);
+                    filterAndRender(products);
+                });
             }
+
             @Override
             public void onError(String error) {
                 if (!isAdded()) return;
@@ -222,19 +204,20 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    // ── Background: filter + group ─────────────────────────────────────────────
+    // ── Filter + Render (all on main thread — fast, no I/O) ───────────────────
 
     /**
-     * Runs on {@code filterThread}.
-     * Filters by search query and groups by type — all off the main thread.
-     * Posts one single Runnable to the main thread when done.
+     * Filters the in-memory list and rebuilds the UI.
+     * This runs entirely on the main thread because:
+     *  • No I/O — it's just iterating an ArrayList in RAM.
+     *  • Moving it to a background thread adds thread-hop latency (~4–8 ms)
+     *    and requires synchronisation, which is slower than just doing it here.
      */
     private void filterAndRender(List<FirebaseHelper.Product> source) {
-        if (source == null) return;
+        if (source == null || !isAdded()) return;
 
-        // LinkedHashMap preserves insertion order for stable category ordering.
+        String query = currentSearchQuery;
         Map<String, List<FirebaseHelper.Product>> grouped = new LinkedHashMap<>();
-        String query = currentSearchQuery; // snapshot to avoid race with UI thread
 
         for (FirebaseHelper.Product p : source) {
             if (query.isEmpty() || p.name.toLowerCase(Locale.ROOT).contains(query)) {
@@ -243,23 +226,9 @@ public class StoreFragment extends Fragment {
             }
         }
 
-        // Snapshot the result — hand immutable data to the main thread.
-        final Map<String, List<FirebaseHelper.Product>> result = grouped;
-
-        mainHandler.post(() -> {
-            if (!isAdded() || getContext() == null) return;
-            showProgress(false);
-            renderSections(result);
-        });
+        renderSections(grouped);
     }
 
-    // ── Main thread: render ────────────────────────────────────────────────────
-
-    /**
-     * Called on the main thread with the fully prepared, filtered, grouped data.
-     * Clears the table and adds every category in one synchronous pass —
-     * no recursive handler loops, no artificial delays.
-     */
     private void renderSections(Map<String, List<FirebaseHelper.Product>> grouped) {
         tableLayout.removeAllViews();
 
@@ -279,7 +248,7 @@ public class StoreFragment extends Fragment {
     private void addHorizontalProductSection(LayoutInflater inflater,
                                              String title,
                                              List<FirebaseHelper.Product> products) {
-        // Category title
+        // Section header
         TextView header = new TextView(getContext());
         String display = title.replace('_', ' ').toLowerCase(Locale.ROOT);
         display = Character.toUpperCase(display.charAt(0)) + display.substring(1);
@@ -296,8 +265,6 @@ public class StoreFragment extends Fragment {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         hScroll.setHorizontalScrollBarEnabled(false);
-        // Hardware layer on each row → GPU composited horizontal scroll.
-        hScroll.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
         LinearLayout row = new LinearLayout(getContext());
         row.setLayoutParams(new LinearLayout.LayoutParams(
@@ -321,14 +288,17 @@ public class StoreFragment extends Fragment {
         final ImageView imageView = card.findViewById(R.id.imageViewProduct);
         final int thumbSize = (int) getResources().getDimension(R.dimen.product_thumbnail_size);
 
+        // ✅ Picasso reuses its internal disk+memory cache automatically.
+        //    noPlaceholder() avoids a layout pass on placeholder swap.
+        //    stableKey() lets Picasso reuse the same bitmap across cards.
         try {
             Picasso.get()
                     .load(imageUrl)
                     .resize(thumbSize, thumbSize)
                     .centerCrop()
-                    .noFade()                         // skip cross-fade → saves GPU work
-                    .placeholder(placeholderDrawable())
-                    .error(errorDrawable())
+                    .noFade()
+                    .placeholder(placeholder)   // pre-built, not rebuilt per card
+                    .error(error)
                     .into(imageView);
         } catch (Exception e) {
             imageView.setBackgroundColor(Color.LTGRAY);
@@ -345,10 +315,10 @@ public class StoreFragment extends Fragment {
     }
 
     private void setupQuantityControls(View card, String productName, double productPrice) {
-        TextView counter  = card.findViewById(R.id.textViewCount);
-        Button minus      = card.findViewById(R.id.minusButton);
-        Button plus       = card.findViewById(R.id.plusButton);
-        Button buy        = card.findViewById(R.id.buyButton);
+        TextView counter = card.findViewById(R.id.textViewCount);
+        Button minus     = card.findViewById(R.id.minusButton);
+        Button plus      = card.findViewById(R.id.plusButton);
+        Button buy       = card.findViewById(R.id.buyButton);
 
         minus.setOnClickListener(v -> {
             int n = getSafeQuantity(counter);
@@ -371,7 +341,6 @@ public class StoreFragment extends Fragment {
         });
     }
 
-    // ✅ FIX: Safely parse integer to prevent NumberFormatException crashes
     private int getSafeQuantity(TextView counter) {
         try {
             return Integer.parseInt(counter.getText().toString().trim());
@@ -385,7 +354,6 @@ public class StoreFragment extends Fragment {
     private void showProductPopup(String name, String imageUrl, double price) {
         if (getContext() == null || getView() == null) return;
 
-        // Dismiss existing popup if still lingering
         if (activePopupWindow != null && activePopupWindow.isShowing()) {
             activePopupWindow.dismiss();
         }
@@ -401,8 +369,8 @@ public class StoreFragment extends Fragment {
             Picasso.get()
                     .load(imageUrl)
                     .noFade()
-                    .placeholder(placeholderDrawable())
-                    .error(errorDrawable())
+                    .placeholder(placeholder)
+                    .error(error)
                     .fit()
                     .centerCrop()
                     .into(img);
@@ -417,10 +385,11 @@ public class StoreFragment extends Fragment {
                 true);
         activePopupWindow.setElevation(100);
         activePopupWindow.setOutsideTouchable(true);
-        activePopupWindow.setBackgroundDrawable(placeholderDrawable());
+        activePopupWindow.setBackgroundDrawable(placeholder);
         activePopupWindow.showAtLocation(requireView(), Gravity.CENTER, 0, 0);
 
-        popupView.findViewById(R.id.btnClosePopup).setOnClickListener(v -> activePopupWindow.dismiss());
+        popupView.findViewById(R.id.btnClosePopup)
+                .setOnClickListener(v -> activePopupWindow.dismiss());
     }
 
     // ── Purchase ───────────────────────────────────────────────────────────────
@@ -449,18 +418,14 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    private Drawable placeholderDrawable() {
+    /**
+     * Builds a rounded rectangle drawable for placeholder / error states.
+     * Called once at fragment creation, not once per card.
+     */
+    private Drawable buildDrawable(String hex) {
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.RECTANGLE);
-        d.setColor(Color.parseColor("#F5F5F5"));
-        d.setCornerRadius(16f);
-        return d;
-    }
-
-    private Drawable errorDrawable() {
-        GradientDrawable d = new GradientDrawable();
-        d.setShape(GradientDrawable.RECTANGLE);
-        d.setColor(Color.parseColor("#FFCDD2"));
+        d.setColor(Color.parseColor(hex));
         d.setCornerRadius(16f);
         return d;
     }

@@ -6,7 +6,6 @@
     android:orientation="vertical"
     android:background="#F0F4F8">
 
-    <!-- ── Navy header strip ─────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -39,19 +38,17 @@
 
     </LinearLayout>
 
-    <!-- ── Cart items card — floats over strip ───────────────────── -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginTop="-16dp"
+        android:layout_marginTop="16dp"
         android:layout_marginBottom="12dp"
         app:cardCornerRadius="16dp"
         app:cardElevation="8dp"
         app:cardBackgroundColor="#FFFFFF">
-
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -74,7 +71,6 @@
         </androidx.core.widget.NestedScrollView>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- ── Checkout card ─────────────────────────────────────────── -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -91,7 +87,6 @@
             android:orientation="vertical"
             android:padding="20dp">
 
-            <!-- Section label -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -102,7 +97,6 @@
                 android:letterSpacing="0.15"
                 android:layout_marginBottom="14dp" />
 
-            <!-- Total row -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -148,7 +142,6 @@
 
             </LinearLayout>
 
-            <!-- Checkout button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnBuyAll"
                 style="@style/Widget.Material3.Button"

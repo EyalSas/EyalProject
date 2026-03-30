@@ -20,6 +20,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.navigation.NavController;
+import androidx.navigation.NavOptions;
 import androidx.navigation.Navigation;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
@@ -96,11 +97,11 @@ public class MainActivity extends AppCompatActivity {
 
         navView.getMenu().findItem(R.id.navigation_cart).setVisible(true);
 
-        // ✅ FIX: Replaced deprecated setOnNavigationItemSelectedListener with setOnItemSelectedListener
+        // ✅ FIX: Handle navigation manually to prevent the Cart from getting stuck in the Store tab
         navView.setOnItemSelectedListener(item -> {
             int itemId = item.getItemId();
-            if (itemId == R.id.navigation_cart) {
 
+            if (itemId == R.id.navigation_cart) {
                 fbHelper.getCartItemCount(count -> {
                     if (count == 0) {
                         LayoutInflater inflater = getLayoutInflater();
@@ -116,13 +117,24 @@ public class MainActivity extends AppCompatActivity {
                         toast.setView(layout);
                         toast.show();
                     } else {
+                        // Navigate to Cart
                         navController.navigate(R.id.navigation_cart);
                     }
                 });
-
                 return false;
             }
-            return NavigationUI.onNavDestinationSelected(item, navController);
+
+            // ✅ CRITICAL FIX: Build NavOptions to completely clear the back stack
+            // when switching to the Home, Store, or Service tabs. This ensures the Cart
+            // doesn't "haunt" the Store tab.
+            NavOptions navOptions = new NavOptions.Builder()
+                    .setLaunchSingleTop(true)
+                    .setRestoreState(false) // This is the magic line that ignores the old history
+                    .setPopUpTo(navController.getGraph().getStartDestinationId(), false, false)
+                    .build();
+
+            navController.navigate(itemId, null, navOptions);
+            return true;
         });
     }
 

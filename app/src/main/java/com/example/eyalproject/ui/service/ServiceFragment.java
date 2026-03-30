@@ -164,8 +164,7 @@ public class ServiceFragment extends Fragment {
         } else {
             if (FirebaseAuth.getInstance().getCurrentUser() == null) return;
             String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            query = db.collection("services").whereEqualTo("ownerUid", uid).orderBy("timestamp", Query.Direction.DESCENDING);
-        }
+            query = db.collection("services").whereEqualTo("ownerUid", uid);        }
 
         query.get().addOnSuccessListener(querySnapshot -> {
             if (!isAdded() || getContext() == null) return;

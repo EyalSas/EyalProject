@@ -6,7 +6,6 @@
     android:orientation="vertical"
     android:background="#F0F4F8">
 
-    <!-- ── Navy header strip ─────────────────────────────────────── -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -38,25 +37,22 @@
 
     </LinearLayout>
 
-    <!-- ── Search + filter card — floats over strip ──────────────── -->
     <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:layout_marginTop="-16dp"
+        android:layout_marginTop="16dp"
         android:layout_marginBottom="8dp"
         app:cardCornerRadius="14dp"
         app:cardElevation="8dp"
         app:cardBackgroundColor="#FFFFFF">
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- Filter spinner row -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -95,7 +91,6 @@
 
             </LinearLayout>
 
-            <!-- Search field -->
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -122,7 +117,6 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Progress bar -->
     <ProgressBar
         android:id="@+id/progressBar"
         android:layout_width="36dp"
@@ -132,7 +126,6 @@
         android:indeterminateTint="#1A5F9E"
         android:visibility="gone" />
 
-    <!-- Products scroll area -->
     <androidx.core.widget.NestedScrollView
         android:id="@+id/nestedScrollView"
         android:layout_width="match_parent"
