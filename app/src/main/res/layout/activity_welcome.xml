@@ -7,7 +7,6 @@
     android:background="#F0F4F8"
     tools:context=".WelcomeActivity">
 
-    <!-- ── Top brand strip (navy, same as login/register) ───────── -->
     <LinearLayout
         android:id="@+id/brandStrip"
         android:layout_width="0dp"
@@ -55,7 +54,6 @@
 
     </LinearLayout>
 
-    <!-- ── White card floating over strip ───────────────────────── -->
     <androidx.cardview.widget.CardView
         android:id="@+id/buttonCard"
         android:layout_width="0dp"
@@ -71,8 +69,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/brandStrip"
         app:layout_constraintVertical_bias="0.0"
-        android:layout_marginTop="-28dp">
-
+        android:layout_marginTop="16dp">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -80,7 +77,6 @@
             android:padding="28dp"
             android:gravity="center_horizontal">
 
-            <!-- Section label -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -91,7 +87,6 @@
                 android:letterSpacing="0.15"
                 android:layout_marginBottom="20dp" />
 
-            <!-- Primary: Create Account button -->
             <Button
                 android:id="@+id/registerButton"
                 android:layout_width="match_parent"
@@ -105,7 +100,6 @@
                 android:textAllCaps="false"
                 app:cornerRadius="10dp" />
 
-            <!-- Divider -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -135,7 +129,6 @@
                     android:background="#DDE4EC" />
             </LinearLayout>
 
-            <!-- Secondary: Sign In outlined button -->
             <Button
                 android:id="@+id/signInText"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -152,7 +145,6 @@
                 app:strokeWidth="1.5dp"
                 app:cornerRadius="10dp" />
 
-            <!-- Footer -->
             <TextView
                 android:id="@+id/footerText"
                 android:layout_width="wrap_content"
@@ -166,7 +158,6 @@
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- Bottom spacer -->
     <View
         android:id="@+id/bottomSpacer"
         android:layout_width="0dp"
