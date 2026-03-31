@@ -27,8 +27,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.core.widget.NestedScrollView;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
@@ -45,16 +46,20 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class StoreFragment extends Fragment {
 
     // ── Views ──────────────────────────────────────────────────────────────────
-    private LinearLayout tableLayout;
-    private LinearLayout skeletonLayout;   // built entirely in Java — no XML file
-    private NestedScrollView nestedScrollView;
+    private RecyclerView recyclerViewMain;
+    private LinearLayout skeletonLayout;   // built entirely in Java
     private Spinner spinnerFilter;
     private TextInputEditText editTextSearch;
     private PopupWindow activePopupWindow;
+
+    // The main adapter that handles the vertical list of categories
+    private CategoryAdapter categoryAdapter;
 
     // ── App-level singletons (survive fragment destroy/recreate) ───────────────
     private static FirebaseHelper fbHelper;
@@ -68,8 +73,9 @@ public class StoreFragment extends Fragment {
     // Glide options built once, reused for every card
     private RequestOptions glideOptions;
 
-    // ── Threading ──────────────────────────────────────────────────────────────
+    // ── Threading (Optimized) ──────────────────────────────────────────────────
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
     private final Runnable searchRunnable = () -> {
         List<FirebaseHelper.Product> cached = productCache.get(selectedFilter);
         if (cached != null) filterAndRender(cached);
@@ -86,8 +92,6 @@ public class StoreFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Keeps this object alive across tab switches — productCache survives,
-        // so every re-entry after the first costs zero network calls.
         //noinspection deprecation
         setRetainInstance(true);
     }
@@ -109,7 +113,7 @@ public class StoreFragment extends Fragment {
                 .error(roundRect("#FFCDD2", 12));
 
         initViews(root);
-        buildSkeletonLayout();   // ← creates skeleton purely in Java, no XML
+        buildSkeletonLayout();
         setupSpinner();
         setupSearch();
         loadProducts();
@@ -126,23 +130,22 @@ public class StoreFragment extends Fragment {
             activePopupWindow.dismiss();
             activePopupWindow = null;
         }
+        // We do not shutdown the executor so it survives fragment replacements
     }
 
     // ── Init ───────────────────────────────────────────────────────────────────
 
     private void initViews(View root) {
-        tableLayout      = root.findViewById(R.id.tableLayout);
-        nestedScrollView = root.findViewById(R.id.nestedScrollView);
+        recyclerViewMain = root.findViewById(R.id.recyclerViewMain);
         spinnerFilter    = root.findViewById(R.id.spinnerFilter);
         editTextSearch   = root.findViewById(R.id.editTextSearch);
+
+        // Setup the main vertical RecyclerView
+        recyclerViewMain.setLayoutManager(new LinearLayoutManager(requireContext()));
+        categoryAdapter = new CategoryAdapter(new ArrayList<>());
+        recyclerViewMain.setAdapter(categoryAdapter);
     }
 
-    /**
-     * Builds the skeleton loading UI entirely in Java — zero new XML or drawable
-     * files. Creates two rows of grey pulsing card placeholders that match the
-     * shape of real product cards. Inserted into the root layout above the
-     * NestedScrollView, hidden by default (GONE), shown only on first load.
-     */
     private void buildSkeletonLayout() {
         skeletonLayout = new LinearLayout(requireContext());
         skeletonLayout.setOrientation(LinearLayout.VERTICAL);
@@ -158,13 +161,12 @@ public class StoreFragment extends Fragment {
         skeletonLayout.addView(buildSkeletonSection(110));  // wider title bar
         skeletonLayout.addView(buildSkeletonSection(80));   // narrower title bar
 
-        // Insert into root LinearLayout, right above the NestedScrollView
-        ViewGroup root = (ViewGroup) nestedScrollView.getParent();
-        int scrollIndex = root.indexOfChild(nestedScrollView);
+        // Insert into root right above the main RecyclerView
+        ViewGroup root = (ViewGroup) recyclerViewMain.getParent();
+        int scrollIndex = root.indexOfChild(recyclerViewMain);
         root.addView(skeletonLayout, scrollIndex);
     }
 
-    /** One skeleton section = a grey title bar + a horizontal row of 3 grey cards. */
     private LinearLayout buildSkeletonSection(int titleWidthDp) {
         LinearLayout section = new LinearLayout(requireContext());
         section.setOrientation(LinearLayout.VERTICAL);
@@ -172,7 +174,6 @@ public class StoreFragment extends Fragment {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // Title placeholder bar
         View titleBar = new View(requireContext());
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
                 px(titleWidthDp), px(16));
@@ -181,7 +182,6 @@ public class StoreFragment extends Fragment {
         titleBar.setBackground(roundRect("#E0E0E0", 8));
         section.addView(titleBar);
 
-        // Horizontal row of 3 skeleton cards
         HorizontalScrollView hScroll = new HorizontalScrollView(requireContext());
         hScroll.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -202,7 +202,6 @@ public class StoreFragment extends Fragment {
         return section;
     }
 
-    /** One skeleton card — a white rounded card containing grey placeholder blocks. */
     private LinearLayout buildSkeletonCard() {
         LinearLayout card = new LinearLayout(requireContext());
         card.setOrientation(LinearLayout.VERTICAL);
@@ -212,15 +211,14 @@ public class StoreFragment extends Fragment {
         card.setBackground(roundRect("#FFFFFF", 14));
         card.setPadding(px(10), px(10), px(10), px(10));
 
-        card.addView(skeletonBlock(ViewGroup.LayoutParams.MATCH_PARENT, 110, 0, "#EBEBEB", 10));  // image
-        card.addView(skeletonBlock(100, 13, 10, "#EBEBEB", 6));   // name
-        card.addView(skeletonBlock(55,  11, 6,  "#EBEBEB", 6));   // price
-        card.addView(skeletonBlock(ViewGroup.LayoutParams.MATCH_PARENT, 30, 10, "#EBEBEB", 8));   // button
+        card.addView(skeletonBlock(ViewGroup.LayoutParams.MATCH_PARENT, 110, 0, "#EBEBEB", 10));
+        card.addView(skeletonBlock(100, 13, 10, "#EBEBEB", 6));
+        card.addView(skeletonBlock(55,  11, 6,  "#EBEBEB", 6));
+        card.addView(skeletonBlock(ViewGroup.LayoutParams.MATCH_PARENT, 30, 10, "#EBEBEB", 8));
 
         return card;
     }
 
-    /** Creates a single grey placeholder block with given dimensions and top margin. */
     private View skeletonBlock(int widthDp, int heightDp, int topMarginDp, String color, int radiusDp) {
         View v = new View(requireContext());
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
@@ -315,16 +313,12 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    /**
-     * Pre-decodes every product image into Glide's disk+memory cache on a
-     * background thread. When the cards are rendered, Glide finds the bitmap
-     * already decoded in RAM → images appear instantly with no grey flash.
-     */
+    /** Pre-decodes images using the Executor pool instead of raw threads. */
     private void prewarmImages(List<FirebaseHelper.Product> products) {
         if (prewarmedFilters.contains(selectedFilter)) return;
         prewarmedFilters.add(selectedFilter);
 
-        new Thread(() -> {
+        backgroundExecutor.execute(() -> {
             for (FirebaseHelper.Product p : products) {
                 if (p.imageUrl == null || p.imageUrl.isEmpty()) continue;
                 try {
@@ -334,7 +328,7 @@ public class StoreFragment extends Fragment {
                             .preload(240, 240);
                 } catch (Exception ignored) {}
             }
-        }, "GlidePrewarm").start();
+        });
     }
 
     // ── Filter + Render ────────────────────────────────────────────────────────
@@ -352,97 +346,181 @@ public class StoreFragment extends Fragment {
             }
         }
 
-        tableLayout.removeAllViews();
-
         if (grouped.isEmpty()) {
+            categoryAdapter.updateData(new ArrayList<>());
             showSnackbar("No products found.");
             return;
         }
 
-        LayoutInflater inflater = getLayoutInflater();
+        List<CategoryData> newCategories = new ArrayList<>();
         for (Map.Entry<String, List<FirebaseHelper.Product>> entry : grouped.entrySet()) {
-            addHorizontalProductSection(inflater, entry.getKey(), entry.getValue());
+            String display = entry.getKey().replace('_', ' ').toLowerCase(Locale.ROOT);
+            display = Character.toUpperCase(display.charAt(0)) + display.substring(1);
+            newCategories.add(new CategoryData(display, entry.getValue()));
+        }
+
+        // Pass new data directly to the adapter
+        categoryAdapter.updateData(newCategories);
+    }
+
+    // ── RecyclerView Adapters ──────────────────────────────────────────────────
+
+    /** Simple POJO holding a category name and its products */
+    private static class CategoryData {
+        String name;
+        List<FirebaseHelper.Product> products;
+        CategoryData(String name, List<FirebaseHelper.Product> products) {
+            this.name = name;
+            this.products = products;
         }
     }
 
-    // ── Section & card builders ────────────────────────────────────────────────
+    /** Vertical Adapter: Renders Categories */
+    private class CategoryAdapter extends RecyclerView.Adapter<CategoryAdapter.CategoryViewHolder> {
+        private List<CategoryData> categories;
 
-    private void addHorizontalProductSection(LayoutInflater inflater,
-                                             String title,
-                                             List<FirebaseHelper.Product> products) {
-        TextView header = new TextView(getContext());
-        String display  = title.replace('_', ' ').toLowerCase(Locale.ROOT);
-        display = Character.toUpperCase(display.charAt(0)) + display.substring(1);
-        header.setText(display);
-        header.setTextSize(20);
-        header.setTypeface(Typeface.DEFAULT_BOLD);
-        header.setTextColor(Color.parseColor("#1976D2"));
-        header.setPadding(16, 24, 16, 8);
-        tableLayout.addView(header);
-
-        HorizontalScrollView hScroll = new HorizontalScrollView(getContext());
-        hScroll.setLayoutParams(new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        hScroll.setHorizontalScrollBarEnabled(false);
-
-        LinearLayout row = new LinearLayout(getContext());
-        row.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(8, 0, 8, 0);
-
-        for (FirebaseHelper.Product p : products) {
-            addProductCard(inflater, row, p.name, p.price, p.imageUrl);
+        CategoryAdapter(List<CategoryData> categories) {
+            this.categories = categories;
         }
 
-        hScroll.addView(row);
-        tableLayout.addView(hScroll);
-    }
-
-    private void addProductCard(LayoutInflater inflater, ViewGroup container,
-                                String productName, double productPrice, String imageUrl) {
-        View card           = inflater.inflate(R.layout.table_row_products, container, false);
-        ImageView imageView = card.findViewById(R.id.imageViewProduct);
-
-        try {
-            Glide.with(requireContext())
-                    .load(imageUrl)
-                    .apply(glideOptions)
-                    .into(imageView);
-        } catch (Exception e) {
-            imageView.setBackgroundColor(Color.LTGRAY);
+        void updateData(List<CategoryData> newData) {
+            this.categories = newData;
+            notifyDataSetChanged();
         }
 
-        ((TextView) card.findViewById(R.id.textViewName)).setText(productName);
-        ((TextView) card.findViewById(R.id.textViewPrice))
-                .setText(String.format(Locale.ROOT, "$%.2f", productPrice));
+        @NonNull
+        @Override
+        public CategoryViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            // Build the layout programmatically to avoid requiring new XML files
+            LinearLayout layout = new LinearLayout(parent.getContext());
+            layout.setOrientation(LinearLayout.VERTICAL);
+            layout.setLayoutParams(new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        imageView.setOnClickListener(v -> showProductPopup(productName, imageUrl, productPrice));
-        setupQuantityControls(card, productName, productPrice);
-        container.addView(card);
-    }
+            TextView header = new TextView(parent.getContext());
+            header.setTextSize(20);
+            header.setTypeface(Typeface.DEFAULT_BOLD);
+            header.setTextColor(Color.parseColor("#1976D2"));
+            header.setPadding(px(16), px(24), px(16), px(8));
+            layout.addView(header);
 
-    private void setupQuantityControls(View card, String productName, double productPrice) {
-        TextView counter = card.findViewById(R.id.textViewCount);
-        Button minus     = card.findViewById(R.id.minusButton);
-        Button plus      = card.findViewById(R.id.plusButton);
-        Button buy       = card.findViewById(R.id.buyButton);
+            RecyclerView horizontalRecycler = new RecyclerView(parent.getContext());
+            horizontalRecycler.setLayoutParams(new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            horizontalRecycler.setClipToPadding(false);
+            horizontalRecycler.setPadding(px(8), 0, px(8), 0);
 
-        minus.setOnClickListener(v -> {
-            int n = getSafeQuantity(counter);
-            if (n > 0) counter.setText(String.valueOf(n - 1));
-        });
-        plus.setOnClickListener(v ->
-                counter.setText(String.valueOf(getSafeQuantity(counter) + 1)));
-        buy.setOnClickListener(v -> {
-            int n = getSafeQuantity(counter);
-            if (n > 0) {
-                purchaseProduct(productName, productPrice, n);
-                counter.setText("0");
-            } else {
-                showSnackbar("Please specify a quantity greater than zero");
+            // Allow child recyclers to scroll horizontally
+            horizontalRecycler.setLayoutManager(new LinearLayoutManager(
+                    parent.getContext(), LinearLayoutManager.HORIZONTAL, false));
+
+            layout.addView(horizontalRecycler);
+
+            return new CategoryViewHolder(layout, header, horizontalRecycler);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull CategoryViewHolder holder, int position) {
+            CategoryData data = categories.get(position);
+            holder.title.setText(data.name);
+
+            // Re-use or create the inner product adapter
+            ProductAdapter productAdapter = new ProductAdapter(data.products);
+            holder.productRecycler.setAdapter(productAdapter);
+        }
+
+        @Override
+        public int getItemCount() {
+            return categories.size();
+        }
+
+        class CategoryViewHolder extends RecyclerView.ViewHolder {
+            TextView title;
+            RecyclerView productRecycler;
+
+            CategoryViewHolder(View itemView, TextView title, RecyclerView productRecycler) {
+                super(itemView);
+                this.title = title;
+                this.productRecycler = productRecycler;
             }
-        });
+        }
+    }
+
+    /** Horizontal Adapter: Renders individual product cards */
+    private class ProductAdapter extends RecyclerView.Adapter<ProductAdapter.ProductViewHolder> {
+        private final List<FirebaseHelper.Product> products;
+
+        ProductAdapter(List<FirebaseHelper.Product> products) {
+            this.products = products;
+        }
+
+        @NonNull
+        @Override
+        public ProductViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.table_row_products, parent, false);
+            return new ProductViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ProductViewHolder holder, int position) {
+            FirebaseHelper.Product p = products.get(position);
+
+            holder.name.setText(p.name);
+            holder.price.setText(String.format(Locale.ROOT, "$%.2f", p.price));
+            holder.counter.setText("0"); // Reset counter when recycling
+
+            try {
+                Glide.with(StoreFragment.this)
+                        .load(p.imageUrl)
+                        .apply(glideOptions)
+                        .into(holder.image);
+            } catch (Exception e) {
+                holder.image.setBackgroundColor(Color.LTGRAY);
+            }
+
+            holder.image.setOnClickListener(v -> showProductPopup(p.name, p.imageUrl, p.price));
+
+            holder.btnMinus.setOnClickListener(v -> {
+                int n = getSafeQuantity(holder.counter);
+                if (n > 0) holder.counter.setText(String.valueOf(n - 1));
+            });
+
+            holder.btnPlus.setOnClickListener(v ->
+                    holder.counter.setText(String.valueOf(getSafeQuantity(holder.counter) + 1)));
+
+            holder.btnBuy.setOnClickListener(v -> {
+                int n = getSafeQuantity(holder.counter);
+                if (n > 0) {
+                    purchaseProduct(p.name, p.price, n);
+                    holder.counter.setText("0");
+                } else {
+                    showSnackbar("Please specify a quantity greater than zero");
+                }
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return products.size();
+        }
+
+        class ProductViewHolder extends RecyclerView.ViewHolder {
+            ImageView image;
+            TextView name, price, counter;
+            Button btnMinus, btnPlus, btnBuy;
+
+            ProductViewHolder(View view) {
+                super(view);
+                image = view.findViewById(R.id.imageViewProduct);
+                name = view.findViewById(R.id.textViewName);
+                price = view.findViewById(R.id.textViewPrice);
+                counter = view.findViewById(R.id.textViewCount);
+                btnMinus = view.findViewById(R.id.minusButton);
+                btnPlus = view.findViewById(R.id.plusButton);
+                btnBuy = view.findViewById(R.id.buyButton);
+            }
+        }
     }
 
     private int getSafeQuantity(TextView counter) {
@@ -453,7 +531,7 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    // ── Popup ──────────────────────────────────────────────────────────────────
+    // ── Popup & Purchase Logic ─────────────────────────────────────────────────
 
     private void showProductPopup(String name, String imageUrl, double price) {
         if (getContext() == null || getView() == null) return;
@@ -492,8 +570,6 @@ public class StoreFragment extends Fragment {
                 .setOnClickListener(v -> activePopupWindow.dismiss());
     }
 
-    // ── Purchase ───────────────────────────────────────────────────────────────
-
     private void purchaseProduct(String name, double price, int qty) {
         if (fbHelper.getCurrentUserId() == null) {
             showSnackbar("Error: User session not found. Please log in.");
@@ -510,12 +586,12 @@ public class StoreFragment extends Fragment {
         if (skeletonLayout == null) return;
         if (show) {
             skeletonLayout.setVisibility(View.VISIBLE);
-            nestedScrollView.setVisibility(View.GONE);
+            recyclerViewMain.setVisibility(View.GONE);
             startShimmer();
         } else {
             stopShimmer();
             skeletonLayout.setVisibility(View.GONE);
-            nestedScrollView.setVisibility(View.VISIBLE);
+            recyclerViewMain.setVisibility(View.VISIBLE);
         }
     }
 
@@ -548,7 +624,6 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    /** Rounded rectangle drawable — used for placeholders and skeleton blocks. */
     private Drawable roundRect(String hex, int radiusDp) {
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.RECTANGLE);
@@ -557,6 +632,5 @@ public class StoreFragment extends Fragment {
         return d;
     }
 
-    /** Converts dp to pixels using the screen density. */
     private int px(int dp) { return Math.round(dp * this.dp); }
 }

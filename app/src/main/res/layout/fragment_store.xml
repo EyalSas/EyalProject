@@ -118,22 +118,11 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- ProgressBar removed — skeleton is built in Java (buildSkeletonLayout) -->
-
-    <androidx.core.widget.NestedScrollView
-        android:id="@+id/nestedScrollView"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerViewMain"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true">
-
-        <LinearLayout
-            android:id="@+id/tableLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingBottom="16dp"
-            android:background="@android:color/transparent" />
-
-    </androidx.core.widget.NestedScrollView>
+        android:paddingBottom="16dp"
+        android:clipToPadding="false" />
 
 </LinearLayout>
