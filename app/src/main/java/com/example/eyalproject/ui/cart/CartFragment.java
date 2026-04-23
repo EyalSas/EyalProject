@@ -34,7 +34,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
-import com.example.eyalproject.FirebaseHelper; // 💡 CHANGED: Import FirebaseHelper
+import com.example.eyalproject.FirebaseHelper;
 import com.example.eyalproject.MainActivity;
 import com.example.eyalproject.R;
 
@@ -47,9 +47,14 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * A fragment that manages the user's shopping cart. It handles displaying the cart items,
+ * calculating total sums, processing mock payments, managing purchase history, and
+ * generating digital receipts. Interacts directly with Firebase to persist and retrieve data.
+ */
 public class CartFragment extends Fragment {
 
-    private FirebaseHelper fbHelper; // 💡 CHANGED: Replaced DBHelper with FirebaseHelper
+    private FirebaseHelper fbHelper;
     private TableLayout tableLayout;
     private TextView textViewTotalSum;
     private View btnBuyAll;
@@ -61,15 +66,23 @@ public class CartFragment extends Fragment {
 
     private Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    // We need to keep track of the current total sum for the checkout button
     private double currentCartTotal = 0.0;
 
+    /**
+     * Called to have the fragment instantiate its user interface view.
+     * Initializes Firebase integration and UI references.
+     *
+     * @param inflater           The LayoutInflater object that can be used to inflate any views in the fragment.
+     * @param container          If non-null, this is the parent view that the fragment's UI should be attached to.
+     * @param savedInstanceState If non-null, this fragment is being re-constructed from a previous saved state.
+     * @return Return the View for the fragment's UI.
+     */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_cart, container, false);
 
-        fbHelper = new FirebaseHelper(); // 💡 Initialize Firebase
+        fbHelper = new FirebaseHelper();
 
         tableLayout = root.findViewById(R.id.tableLayout);
         textViewTotalSum = root.findViewById(R.id.textViewTotalSum);
@@ -79,6 +92,10 @@ public class CartFragment extends Fragment {
         return root;
     }
 
+    /**
+     * Called when the fragment is visible to the user and actively running.
+     * Triggers the cart data load and sets up the primary action listeners for checkout and history.
+     */
     @Override
     public void onResume() {
         super.onResume();
@@ -101,7 +118,8 @@ public class CartFragment extends Fragment {
     }
 
     /**
-     * 💡 FIX: Completely rewritten to fetch data from Firebase Firestore
+     * Fetches the current user's cart items asynchronously from Firebase Firestore.
+     * Upon success, updates the local cart total and triggers the UI refresh.
      */
     private void loadCartDataAsync() {
         String userId = fbHelper.getCurrentUserId();
@@ -110,13 +128,12 @@ public class CartFragment extends Fragment {
             return;
         }
 
-        // Fetch cart items from Firebase
         fbHelper.getCartItems(new FirebaseHelper.CartCallback() {
             @Override
             public void onCartLoaded(List<FirebaseHelper.CartItem> items, double totalSum) {
                 if (!isAdded() || getContext() == null) return;
 
-                currentCartTotal = totalSum; // Save for checkout
+                currentCartTotal = totalSum;
                 displayOrdersUI(items);
                 updateTotalSumUI(totalSum);
             }
@@ -130,7 +147,10 @@ public class CartFragment extends Fragment {
     }
 
     /**
-     * 💡 FIX: Updated to accept Firebase CartItem objects
+     * Clears the current table layout and populates it with rows representing the fetched cart items.
+     * Displays an empty state if the item list is empty.
+     *
+     * @param items The list of cart items to display.
      */
     private void displayOrdersUI(List<FirebaseHelper.CartItem> items) {
         tableLayout.removeAllViews();
@@ -144,8 +164,14 @@ public class CartFragment extends Fragment {
         }
     }
 
+    /**
+     * Updates the UI element displaying the total calculated sum of the cart.
+     * Enables or disables the checkout button based on whether the total is greater than zero.
+     *
+     * @param totalSum The calculated total price.
+     */
     private void updateTotalSumUI(double totalSum) {
-        textViewTotalSum.setText(String.format("$%.2f", totalSum));
+        textViewTotalSum.setText(String.format(Locale.getDefault(), "$%.2f", totalSum));
         if (btnBuyAll != null) {
             boolean hasItems = totalSum > 0;
             btnBuyAll.setEnabled(hasItems);
@@ -153,6 +179,12 @@ public class CartFragment extends Fragment {
         }
     }
 
+    /**
+     * Inflates and displays a payment confirmation dialog requiring the user to input
+     * standard credit card details to proceed with the checkout.
+     *
+     * @param totalAmount The total amount to be charged, displayed on the confirmation button.
+     */
     private void showPaymentPopup(double totalAmount) {
         View popupView = LayoutInflater.from(getContext()).inflate(R.layout.payment_popup, null);
         AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
@@ -165,7 +197,7 @@ public class CartFragment extends Fragment {
         final Button btnPayNow = popupView.findViewById(R.id.btnPayNow);
         final Button btnCancelPayment = popupView.findViewById(R.id.btnCancelPayment);
 
-        btnPayNow.setText(String.format("Pay $%.2f", totalAmount));
+        btnPayNow.setText(String.format(Locale.getDefault(), "Pay $%.2f", totalAmount));
         addExpiryDateTextWatcher(editTextExpiryDate);
         paymentDialog = builder.create();
 
@@ -186,6 +218,15 @@ public class CartFragment extends Fragment {
         paymentDialog.show();
     }
 
+    /**
+     * Validates the format and logic of the provided payment details.
+     *
+     * @param cardNumber    The input credit card number.
+     * @param expiryDate    The input expiration date.
+     * @param cvv           The input CVV.
+     * @param errorTextView The TextView used to display specific validation errors.
+     * @return True if all details are valid, False otherwise.
+     */
     private boolean validatePaymentDetails(String cardNumber, String expiryDate, String cvv, TextView errorTextView) {
         if (TextUtils.isEmpty(cardNumber) || TextUtils.isEmpty(expiryDate) || TextUtils.isEmpty(cvv)) {
             errorTextView.setText("All fields are required.");
@@ -228,6 +269,11 @@ public class CartFragment extends Fragment {
         return true;
     }
 
+    /**
+     * Adds a TextWatcher to automatically format the expiration date input with a slash (MM/YY).
+     *
+     * @param et The EditText to which the formatter is applied.
+     */
     private void addExpiryDateTextWatcher(EditText et) {
         et.addTextChangedListener(new TextWatcher() {
             private String current = "";
@@ -258,7 +304,8 @@ public class CartFragment extends Fragment {
     }
 
     /**
-     * 💡 FIX: Checkout process rewritten for Firebase
+     * Finalizes the checkout process by generating a digital receipt from the current cart items,
+     * saving it to the user's history in Firebase, and clearing the active cart.
      */
     private void buyAll() {
         if (fbHelper.getCurrentUserId() == null) {
@@ -266,7 +313,6 @@ public class CartFragment extends Fragment {
             return;
         }
 
-        // 1. Fetch the items one last time to generate the receipt
         fbHelper.getCartItems(new FirebaseHelper.CartCallback() {
             @Override
             public void onCartLoaded(List<FirebaseHelper.CartItem> items, double totalSum) {
@@ -274,7 +320,6 @@ public class CartFragment extends Fragment {
 
                 String receipt = generateDigitalReceipt(items, totalSum);
 
-                // 2. Clear the cart in Firebase and save the receipt
                 fbHelper.checkoutCart(receipt, totalSum, new FirebaseHelper.CheckoutCallback() {
                     @Override
                     public void onSuccess() {
@@ -282,7 +327,7 @@ public class CartFragment extends Fragment {
 
                         showReceiptPopup(receipt);
                         schedulePurchaseNotification();
-                        loadCartDataAsync(); // Reload UI
+                        loadCartDataAsync();
                         showCustomToast("Purchase successful! History saved.", R.drawable.ic_store, R.color.success_color);
                     }
 
@@ -290,7 +335,7 @@ public class CartFragment extends Fragment {
                     public void onFailure(String error) {
                         if (!isAdded() || getContext() == null) return;
 
-                        saveReceiptToFile(receipt); // Fallback
+                        saveReceiptToFile(receipt);
                         showCustomToast("Payment successful but failed to save history to DB. Saved to file.",
                                 R.drawable.ic_store, R.color.error);
                     }
@@ -304,6 +349,9 @@ public class CartFragment extends Fragment {
         });
     }
 
+    /**
+     * Displays a placeholder empty state view within the table layout when no items exist in the cart.
+     */
     private void showEmptyCartState() {
         tableLayout.removeAllViews();
         TableRow emptyRow = new TableRow(getContext());
@@ -330,7 +378,11 @@ public class CartFragment extends Fragment {
     }
 
     /**
-     * 💡 FIX: Uses Firebase CartItem
+     * Constructs a TableRow designed to represent a single cart item, including its name,
+     * total price based on quantity, and an interactive removal button.
+     *
+     * @param item The CartItem instance defining the row's data.
+     * @return The fully constructed TableRow.
      */
     private TableRow createOrderRow(FirebaseHelper.CartItem item) {
         TableRow tableRow = new TableRow(getContext());
@@ -343,17 +395,15 @@ public class CartFragment extends Fragment {
         layoutParams.setMargins(0, 0, 0, 8);
         tableRow.setLayoutParams(layoutParams);
 
-        // Product name
         TextView textViewOrderName = new TextView(getContext());
-        textViewOrderName.setText(item.productName + " (x" + item.quantity + ")"); // Show quantity
+        textViewOrderName.setText(item.productName + " (x" + item.quantity + ")");
         textViewOrderName.setTextColor(ContextCompat.getColor(getContext(), R.color.text_primary));
         textViewOrderName.setTextSize(16);
         textViewOrderName.setPadding(16, 20, 16, 20);
         textViewOrderName.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 3f));
 
-        // Price
         TextView textViewOrderPrice = new TextView(getContext());
-        textViewOrderPrice.setText(String.format("$%.2f", item.price * item.quantity)); // Total item price
+        textViewOrderPrice.setText(String.format(Locale.getDefault(), "$%.2f", item.price * item.quantity));
         textViewOrderPrice.setTextColor(ContextCompat.getColor(getContext(), R.color.primary_color));
         textViewOrderPrice.setTextSize(16);
         textViewOrderPrice.setTypeface(null, Typeface.BOLD);
@@ -361,7 +411,6 @@ public class CartFragment extends Fragment {
         textViewOrderPrice.setGravity(Gravity.CENTER);
         textViewOrderPrice.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1f));
 
-        // Remove button
         Button btnRemoveItem = new Button(getContext());
         btnRemoveItem.setText("Remove");
         btnRemoveItem.setTextSize(12);
@@ -371,7 +420,6 @@ public class CartFragment extends Fragment {
         btnRemoveItem.setLayoutParams(new TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1f));
 
         btnRemoveItem.setOnClickListener(v -> {
-            // 💡 FIX: Delete from Firebase
             fbHelper.deleteCartItem(item.documentId, new FirebaseHelper.ActionCallback() {
                 @Override
                 public void onSuccess() {
@@ -396,7 +444,8 @@ public class CartFragment extends Fragment {
     }
 
     /**
-     * 💡 FIX: Fetch history from Firebase
+     * Presents a popup window displaying the user's chronological purchase history.
+     * Fetches the historical receipt data asynchronously from Firebase.
      */
     private void showHistoryPopup() {
         if (getContext() == null || getView() == null) return;
@@ -410,7 +459,6 @@ public class CartFragment extends Fragment {
         LinearLayout historyContainer = popupView.findViewById(R.id.historyPopupContainer);
         Button btnCloseHistory = popupView.findViewById(R.id.btnCloseHistory);
 
-        // Show loading text while fetching from Firebase
         TextView loadingText = new TextView(getContext());
         loadingText.setText("Loading history...");
         loadingText.setGravity(Gravity.CENTER);
@@ -426,12 +474,11 @@ public class CartFragment extends Fragment {
         historyPopup.setElevation(20f);
         historyPopup.showAtLocation(requireView(), Gravity.CENTER, 0, 0);
 
-        // Fetch history asynchronously
         fbHelper.getReceiptHistory(new FirebaseHelper.HistoryCallback() {
             @Override
             public void onHistoryLoaded(List<FirebaseHelper.ReceiptItem> historyList) {
                 if (!isAdded() || getContext() == null) return;
-                historyContainer.removeAllViews(); // Remove loading text
+                historyContainer.removeAllViews();
 
                 if (historyList.isEmpty()) {
                     TextView emptyText = new TextView(getContext());
@@ -467,6 +514,11 @@ public class CartFragment extends Fragment {
         btnCloseHistory.setOnClickListener(v -> historyPopup.dismiss());
     }
 
+    /**
+     * Generates a styled header row for the purchase history table.
+     *
+     * @return The constructed header TableLayout.
+     */
     private TableLayout createHistoryHeader() {
         TableLayout headerLayout = new TableLayout(getContext());
         headerLayout.setLayoutParams(new LinearLayout.LayoutParams(
@@ -493,6 +545,16 @@ public class CartFragment extends Fragment {
         return headerLayout;
     }
 
+    /**
+     * A helper method to create uniformly styled TextView instances for table cells.
+     *
+     * @param context The application context.
+     * @param text    The text string to display.
+     * @param weight  The layout weight defining the cell's horizontal span.
+     * @param color   The resource color value for the text.
+     * @param isBold  Boolean dictating if the text should be bolded.
+     * @return The constructed TextView.
+     */
     private TextView createTextView(Context context, String text, float weight, int color, boolean isBold) {
         TextView tv = new TextView(context);
         tv.setText(text);
@@ -506,7 +568,11 @@ public class CartFragment extends Fragment {
     }
 
     /**
-     * 💡 FIX: Uses Firebase ReceiptItem
+     * Constructs a TableRow that visually represents a single historical purchase,
+     * complete with an action button to view the full digital receipt.
+     *
+     * @param item The ReceiptItem instance defining the historical transaction.
+     * @return The configured TableRow.
      */
     private TableRow createHistoryRow(FirebaseHelper.ReceiptItem item) {
         Context context = getContext();
@@ -519,16 +585,13 @@ public class CartFragment extends Fragment {
         int textColorSecondary = ContextCompat.getColor(context, R.color.text_secondary);
         int primaryColor = ContextCompat.getColor(context, R.color.primary_color);
 
-        // Date (Weight 2)
         String shortDate = item.date.length() >= 10 ? item.date.substring(0, 10) : item.date;
         TextView tvDate = createTextView(context, shortDate, 2f, textColorSecondary, false);
         row.addView(tvDate);
 
-        // Price (Weight 2)
-        TextView tvPrice = createTextView(context, String.format("$%.2f", item.totalPrice), 2f, primaryColor, true);
+        TextView tvPrice = createTextView(context, String.format(Locale.getDefault(), "$%.2f", item.totalPrice), 2f, primaryColor, true);
         row.addView(tvPrice);
 
-        // Action Button (Weight 2)
         Button btnViewReceipt = new Button(context);
         btnViewReceipt.setText("View");
         btnViewReceipt.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
@@ -545,6 +608,10 @@ public class CartFragment extends Fragment {
         return row;
     }
 
+    /**
+     * Uses the AlarmManager to schedule a simulated local notification confirming
+     * that the purchase is being processed.
+     */
     private void schedulePurchaseNotification() {
         try {
             AlarmManager alarmManager = (AlarmManager) requireContext().getSystemService(Context.ALARM_SERVICE);
@@ -569,6 +636,12 @@ public class CartFragment extends Fragment {
         }
     }
 
+    /**
+     * Initializes and displays a popup over the current screen containing the full text
+     * of a digital receipt, and provides a mechanism to share it.
+     *
+     * @param receiptContent The formatted text contents of the receipt.
+     */
     private void showReceiptPopup(String receiptContent) {
         View popupView = LayoutInflater.from(getContext()).inflate(R.layout.receipt_popup, null);
         TextView textViewReceipt = popupView.findViewById(R.id.textViewReceipt);
@@ -602,6 +675,12 @@ public class CartFragment extends Fragment {
         receiptPopup.setFocusable(true);
     }
 
+    /**
+     * Triggers a system share sheet allowing the user to send the text content
+     * of the digital receipt to other applications.
+     *
+     * @param receiptContent The formatted receipt string to be shared.
+     */
     private void shareReceipt(String receiptContent) {
         try {
             android.content.Intent shareIntent = new android.content.Intent(android.content.Intent.ACTION_SEND);
@@ -615,7 +694,12 @@ public class CartFragment extends Fragment {
     }
 
     /**
-     * 💡 FIX: Generates receipt from Firebase CartItems
+     * Formats the list of purchased cart items and the total sum into a clean,
+     * human-readable digital receipt string.
+     *
+     * @param items    The list of items purchased.
+     * @param totalSum The overall sum of the purchase.
+     * @return A formatted text string acting as the receipt.
      */
     private String generateDigitalReceipt(List<FirebaseHelper.CartItem> items, double totalSum) {
         StringBuilder receipt = new StringBuilder();
@@ -633,12 +717,12 @@ public class CartFragment extends Fragment {
         for (FirebaseHelper.CartItem item : items) {
             double itemTotal = item.price * item.quantity;
             subtotal += itemTotal;
-            receipt.append(String.format("• %-20s x%d $%.2f\n", item.productName, item.quantity, itemTotal));
+            receipt.append(String.format(Locale.getDefault(), "• %-20s x%d $%.2f\n", item.productName, item.quantity, itemTotal));
         }
 
         receipt.append("----------------\n");
-        receipt.append(String.format("SUBTOTAL:       $%.2f\n", subtotal));
-        receipt.append(String.format("TOTAL:          $%.2f\n", totalSum));
+        receipt.append(String.format(Locale.getDefault(), "SUBTOTAL:       $%.2f\n", subtotal));
+        receipt.append(String.format(Locale.getDefault(), "TOTAL:          $%.2f\n", totalSum));
         receipt.append("======================\n");
         receipt.append("Thank you for your purchase! 🎉\n");
         receipt.append("We hope to see you again soon!\n\n");
@@ -647,6 +731,11 @@ public class CartFragment extends Fragment {
         return receipt.toString();
     }
 
+    /**
+     * Resolves and creates the local directory structure intended for saving fallback receipts.
+     *
+     * @return The directory File object.
+     */
     private File getReceiptsDirectory() {
         File receiptsDir = new File(requireContext().getFilesDir(), "Receipts");
         if (!receiptsDir.exists()) {
@@ -655,6 +744,13 @@ public class CartFragment extends Fragment {
         return receiptsDir;
     }
 
+    /**
+     * Provides a fallback mechanism to save a generated digital receipt to local device storage
+     * in the event that saving to the cloud database fails.
+     *
+     * @param receipt The text content of the receipt.
+     * @return True if the file write operation was successful, False otherwise.
+     */
     private boolean saveReceiptToFile(String receipt) {
         FileOutputStream fos = null;
         try {
@@ -683,6 +779,14 @@ public class CartFragment extends Fragment {
         }
     }
 
+    /**
+     * Inflates a custom layout to display an engaging, styled toast notification.
+     * Falls back to a standard Android Toast if custom inflation fails.
+     *
+     * @param message          The message string to be displayed.
+     * @param iconResId        The drawable resource ID for the icon.
+     * @param typeColorResId   The color resource ID determining the toast's visual theme.
+     */
     private void showCustomToast(String message, int iconResId, int typeColorResId) {
         if (getContext() == null || getActivity() == null) return;
 
@@ -713,6 +817,10 @@ public class CartFragment extends Fragment {
         }
     }
 
+    /**
+     * Called when the view previously created by onCreateView has been detached from the fragment.
+     * Explicitly dismisses any open dialogs or popups to prevent window leak exceptions.
+     */
     @Override
     public void onDestroyView() {
         if (receiptPopup != null && receiptPopup.isShowing()) {

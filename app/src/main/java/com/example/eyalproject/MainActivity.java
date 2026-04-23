@@ -29,6 +29,11 @@ import com.example.eyalproject.databinding.ActivityMainBinding;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 
+/**
+ * The core activity of the application. It handles global navigation using a BottomNavigationView,
+ * displays user profile information via a popup window, tracks the user's authentication state,
+ * and maintains session continuity using SharedPreferences.
+ */
 public class MainActivity extends AppCompatActivity {
 
     private ActivityMainBinding binding;
@@ -37,12 +42,19 @@ public class MainActivity extends AppCompatActivity {
     private NavController navController;
 
     private FirebaseHelper fbHelper;
-
-    // ✅ FIX: Track active popup to prevent WindowLeaked exceptions
     private PopupWindow profilePopupWindow;
 
     private static final String PREFS_NAME = "AppPrefs";
 
+    /**
+     * Initializes the main activity, verifying authentication state and setting up
+     * the navigation controller for fragments. If the user is unauthenticated, they
+     * are instantly logged out.
+     *
+     * @param savedInstanceState If the activity is being re-initialized after previously being
+     * shut down then this Bundle contains the data it most recently
+     * supplied.
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -65,9 +77,6 @@ public class MainActivity extends AppCompatActivity {
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-
-        // Call the massive product list below
-        //migrateProductsToFirebase();
 
         BottomNavigationView navView = findViewById(R.id.nav_view);
 
@@ -97,7 +106,6 @@ public class MainActivity extends AppCompatActivity {
 
         navView.getMenu().findItem(R.id.navigation_cart).setVisible(true);
 
-        // ✅ FIX: Handle navigation manually to prevent the Cart from getting stuck in the Store tab
         navView.setOnItemSelectedListener(item -> {
             int itemId = item.getItemId();
 
@@ -117,19 +125,15 @@ public class MainActivity extends AppCompatActivity {
                         toast.setView(layout);
                         toast.show();
                     } else {
-                        // Navigate to Cart
                         navController.navigate(R.id.navigation_cart);
                     }
                 });
                 return false;
             }
 
-            // ✅ CRITICAL FIX: Build NavOptions to completely clear the back stack
-            // when switching to the Home, Store, or Service tabs. This ensures the Cart
-            // doesn't "haunt" the Store tab.
             NavOptions navOptions = new NavOptions.Builder()
                     .setLaunchSingleTop(true)
-                    .setRestoreState(false) // This is the magic line that ignores the old history
+                    .setRestoreState(false)
                     .setPopUpTo(navController.getGraph().getStartDestinationId(), false, false)
                     .build();
 
@@ -138,6 +142,9 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Initializes the listener for the user profile image to trigger the profile popup.
+     */
     private void setupProfileIcon() {
         ImageView profileIcon = findViewById(R.id.user_profile_image);
         if (profileIcon != null) {
@@ -150,6 +157,10 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Terminates the user's session, clears preferences, signs them out of Firebase,
+     * and redirects them to the WelcomeActivity.
+     */
     private void logoutUser() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         prefs.edit().clear().apply();
@@ -162,6 +173,10 @@ public class MainActivity extends AppCompatActivity {
         finish();
     }
 
+    /**
+     * Sets up a destination listener on the navigation controller to attach user-specific
+     * arguments when navigating to particular fragments, such as the service fragment.
+     */
     private void setupNavigationWithUsername() {
         navController.addOnDestinationChangedListener((controller, destination, arguments) -> {
             if (destination.getId() == R.id.navigation_service) {
@@ -171,17 +186,30 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Gets the currently authenticated user's username.
+     *
+     * @return The string representation of the username.
+     */
     public String getUsername() {
         return username;
     }
 
+    /**
+     * Handles Up navigation via the active NavController.
+     *
+     * @return True if navigation was successful, false otherwise.
+     */
     @Override
     public boolean onSupportNavigateUp() {
         return navController.navigateUp() || super.onSupportNavigateUp();
     }
 
+    /**
+     * Displays a customized profile dropdown using a PopupWindow. Binds user details
+     * and provides a logout interaction.
+     */
     private void showProfileDialog() {
-        // Dismiss existing popup if still lingering
         if (profilePopupWindow != null && profilePopupWindow.isShowing()) {
             profilePopupWindow.dismiss();
         }
@@ -208,7 +236,6 @@ public class MainActivity extends AppCompatActivity {
 
         ImageView profileIcon = findViewById(R.id.user_profile_image);
 
-        // ✅ FIX: Use dynamic DP instead of raw hardcoded pixels (-180, 10) for device consistency
         int xOffset = dpToPx(-60);
         int yOffset = dpToPx(4);
         profilePopupWindow.showAsDropDown(profileIcon, xOffset, yOffset);
@@ -233,26 +260,37 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ✅ FIX: Helper method to convert DP to Pixels dynamically
+    /**
+     * Helper utility to convert density-independent pixels (dp) to absolute pixels (px).
+     *
+     * @param dp The dimension in dp.
+     * @return The dimension converted to absolute pixels based on the display metrics.
+     */
     private int dpToPx(int dp) {
         return (int) TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, dp, getResources().getDisplayMetrics());
     }
 
+    /**
+     * Called before the activity is destroyed. Ensures memory is properly freed and
+     * dismisses active popups to prevent window leakage exceptions.
+     */
     @Override
     protected void onDestroy() {
         super.onDestroy();
         binding = null;
 
-        // ✅ FIX: Safely dismiss popup to prevent WindowLeaked exceptions on rotation/navigation
         if (profilePopupWindow != null && profilePopupWindow.isShowing()) {
             profilePopupWindow.dismiss();
             profilePopupWindow = null;
         }
     }
 
+    /**
+     * An internal utility method that bulk uploads default product data to Firestore.
+     * Contains predefined definitions of various electronics and accessories.
+     */
     private void migrateProductsToFirebase() {
-        // COMPUTERS
         fbHelper.uploadSingleProduct("Gaming PC Ryzen 7", 1299.99, "https://m.media-amazon.com/images/I/715ey5-SgiL.jpg", "COMPUTERS");
         fbHelper.uploadSingleProduct("MacBook Pro 16\" M3", 2499.99, "https://www.istoreil.co.il/media/catalog/product/m/a/macbook_pro_16_in_m3_pro_max_space_black_pdp_image_position-1__wwen_2.jpg", "COMPUTERS");
         fbHelper.uploadSingleProduct("Dell XPS 13 Laptop", 1199.99, "https://m.media-amazon.com/images/I/710EGJBdIML._AC_SL1500_.jpg", "COMPUTERS");
@@ -260,7 +298,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("HP Pavilion Desktop", 899.99, "https://m.media-amazon.com/images/I/81Lp4dVJDdL._AC_SX300_SY300_QL70_FMwebp_.jpg", "COMPUTERS");
         fbHelper.uploadSingleProduct("Lenovo ThinkPad", 1099.99, "https://m.media-amazon.com/images/I/61IRRQ2gWPL.jpg", "COMPUTERS");
         fbHelper.uploadSingleProduct("Alienware Aurora R15", 2199.99, "https://i.dell.com/is/image/DellContent/content/dam/ss2/product-images/dell-client-products/desktops/alienware-desktops/alienware-aurora-r15-intel/media-gallery/lunar-light-wh-clear-cryo-tech/desktop-alienware-aurora-r15-white-cryo-clear-panel-gallery-1.psd?fmt=png-alpha&pscan=auto&scl=1&wid=3398&hei=3941&qlt=100,1&resMode=sharp2&size=3398,3941&chrss=full&imwidth=5000", "COMPUTERS");
-        fbHelper.uploadSingleProduct("Microsoft Surface Pro", 1299.99, "https://www.adcs.co.il/media/catalog/product/cache/0d7e15299f2e9c150ef66e46509ba14b/z/d/zdt-00001_132150_.jpeg", "COMPUTERS");
         fbHelper.uploadSingleProduct("Acer Predator Helios", 1499.99, "https://m.media-amazon.com/images/I/71sS7G5ZpQL._AC_SX300_SY300_QL70_FMwebp_.jpg", "COMPUTERS");
         fbHelper.uploadSingleProduct("Custom Water Cooled PC", 2999.99, "https://i.ytimg.com/vi/-LDwgCbwcJ0/maxresdefault.jpg", "COMPUTERS");
         fbHelper.uploadSingleProduct("Mac Mini M2 Pro", 1299.99, "https://mikicom.co.il/Cat_499090_4267.webp", "COMPUTERS");
@@ -278,7 +315,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("Microsoft Surface Laptop", 1199.99, "https://cdn-dynmedia-1.microsoft.com/is/image/microsoftcorp/MSFT-Surface-Laptop-6-Sneak-Curosel-Pivot-3?scl=1", "COMPUTERS");
         fbHelper.uploadSingleProduct("All-in-One Desktop", 1299.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT86XPxDxo6rmFQbyAizWFBPXbif378kLYuQQ&s", "COMPUTERS");
 
-        // GAMING CONSOLES
         fbHelper.uploadSingleProduct("PlayStation 5 Pro", 599.99, "https://hotstore.hotmobile.co.il/media/catalog/product/cache/a73c0d5d6c75fbb1966fe13af695aeb7/p/s/ps5_cfi2000_pr_01_cmyk_copy_3.png", "GAMING_CONSOLES");
         fbHelper.uploadSingleProduct("Xbox Series X", 499.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRYFRrbQ9WDJ6hiIreMaoOfVVLfR6gzKlr5bw&s", "GAMING_CONSOLES");
         fbHelper.uploadSingleProduct("Nintendo Switch OLED", 349.99, "https://media.gamestop.com/i/gamestop/11149258/Nintendo-Switch-OLED-Console", "GAMING_CONSOLES");
@@ -305,9 +341,7 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("Gaming Microphone", 99.99, "https://m.media-amazon.com/images/I/71jfzOmq6dL.jpg", "GAMING_CONSOLES");
         fbHelper.uploadSingleProduct("Console Travel Bag", 59.99, "https://m.media-amazon.com/images/I/8173csq7edL._UY1000_.jpg", "GAMING_CONSOLES");
         fbHelper.uploadSingleProduct("Gaming Console Bundle", 699.99, "https://i5.walmartimages.com/seo/Latest-Xbox-Series-X-Gaming-Console-Bundle-1TB-SSD-Black-Xbox-Console-and-Wireless-Controller-with-HALO-Infinity-and-Mytrix-HDMI-Cable_7bfe8527-c6ae-42b3-a403-30a7655ae0c1.9c3ed2a067f4ac136194010f919fe3c4.jpeg", "GAMING_CONSOLES");
-        fbHelper.uploadSingleProduct("Console Storage Expansion", 199.99, "https://www.seagate.com/content/dam/seagate/assets/products/gaming-drive/xbox/storage-expansion-for-xbox-series-x/storage-expansion-card-for-xbox-series-x-s-pdp-row-2-4-640x640.png/_jcr_content/renditions/1-1-large-640x640.png", "GAMING_CONSOLES");
 
-        // TVS AND DISPLAYS
         fbHelper.uploadSingleProduct("Samsung 85\" 8K QLED TV", 3999.99, "https://img.zap.co.il/pics/9/4/2/8/77838249d.gif", "TVS_AND_DISPLAYS");
         fbHelper.uploadSingleProduct("LG 77\" OLED C3", 2499.99, "https://media.us.lg.com/transform/ecomm-PDPGallery-1100x730/af63d767-92db-4c8a-8200-75c2dfadf1c8/md08003930-DZ-2-jpg?io=transform:fill,width:596", "TVS_AND_DISPLAYS");
         fbHelper.uploadSingleProduct("Sony Bravia 65\" 4K", 1799.99, "https://www.traklin.co.il/images/gallery/15696/x75wl.jpg", "TVS_AND_DISPLAYS");
@@ -332,7 +366,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("TV LED Backlight Kit", 49.99, "https://m.media-amazon.com/images/I/71B4RM9iriL.jpg", "TVS_AND_DISPLAYS");
         fbHelper.uploadSingleProduct("Monitor Privacy Screen", 79.99, "https://us.targus.com/cdn/shop/products/0027620_4vu-privacy-screen-for-235-widescreen-monitors-169-706848.jpg?v=1625678313", "TVS_AND_DISPLAYS");
 
-        // VIDEO GAMES
         fbHelper.uploadSingleProduct("Call of Duty: Modern Warfare III", 69.99, "https://m.media-amazon.com/images/I/71nWtjjUz-L._AC_UF1000,1000_QL80_.jpg", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("EA Sports FC 24", 59.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTws4C1Pyl0xqmMUql2fbCZC0RFkl8eRPQA2Q&s", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("Spider-Man 2 PS5", 69.99, "https://m.media-amazon.com/images/I/81WUPcfQ9OL._AC_UF1000,1000_QL80_.jpg", "VIDEO_GAMES");
@@ -340,7 +373,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("Grand Theft Auto VI", 79.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5bff_9PYPv8dgHVkEKbj2RgHFMXijTqxNDA&s", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("FIFA 24 Xbox", 59.99, "https://www.king-games.co.il/files/products/product21489_image1_2023-07-31_14-17-16.webp", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("Cyberpunk 2077 Phantom", 49.99, "https://upload.wikimedia.org/wikipedia/en/d/de/Cyberpunk_2077_Phantom_Liberty_cover_art.jpg", "VIDEO_GAMES");
-        fbHelper.uploadSingleProduct("Mario Kart 8 Deluxe", 54.99, "https://www.amazon.com/-/he/Mario-Kart-Deluxe-%D7%90%D7%9E%D7%A8%D7%99%D7%A7%D7%90%D7%99%D7%AA-Nintendo-Switch/dp/B01N1037CV", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("God of War Ragnarok", 59.99, "https://upload.wikimedia.org/wikipedia/en/e/ee/God_of_War_Ragnar%C3%B6k_cover.jpg", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("NBA 2K24", 69.99, "https://upload.wikimedia.org/wikipedia/en/thumb/4/48/NBA_2K24_cover_art.jpg/250px-NBA_2K24_cover_art.jpg", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("Elden Ring Shadow", 59.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTB8NuBEuxyQPvHryc549LN9A2OV6H7UO4xJg&s", "VIDEO_GAMES");
@@ -348,7 +380,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("Ratchet & Clank: Rift", 69.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ5J0NWCTzkx_yi__zBQjReYu28i7v1JSTipQ&s", "VIDEO_GAMES");
         fbHelper.uploadSingleProduct("Returnal PS5", 69.99, "https://m.media-amazon.com/images/I/71kEwiRf03L._AC_UF1000,1000_QL80_.jpg", "VIDEO_GAMES");
 
-        // HOME APPLIANCES
         fbHelper.uploadSingleProduct("Samsung Smart Refrigerator", 1899.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSmxjLim8WDBjt6seA0AXWVK2jzSapLujqqJg&s", "HOME_APPLIANCES");
         fbHelper.uploadSingleProduct("LG Inverter Washing Machine", 899.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTsjZhOhdrakoeECEtMjhiujKrlhSxjlKg_6Q&s", "HOME_APPLIANCES");
         fbHelper.uploadSingleProduct("KitchenAid Stand Mixer", 429.99, "https://m.media-amazon.com/images/I/615kwOY9+3L.jpg", "HOME_APPLIANCES");
@@ -361,7 +392,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("Robot Vacuum S9", 999.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSy8r2jdtntIMuFZFu6Cl7KMLitgjV_Wy89A&s", "HOME_APPLIANCES");
         fbHelper.uploadSingleProduct("Bosch Dishwasher 800", 1099.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRcCurcc_BuZz5DEKUaJfjsLELV8YZtM5sTtQ&s", "HOME_APPLIANCES");
 
-        // AUDIO EQUIPMENT
         fbHelper.uploadSingleProduct("Sony WH-1000XM5 Headphones", 399.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSOux4xPx67B3OnDxjDlNlRkvE8msB70vjl7Q&s", "AUDIO_EQUIPMENT");
         fbHelper.uploadSingleProduct("Apple AirPods Pro 2", 249.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRktbsvMfnEHG6TJVW2uH37hubZQb2SKSjrCw&s", "AUDIO_EQUIPMENT");
         fbHelper.uploadSingleProduct("Bose QuietComfort Ultra", 429.99, "https://beingbetter-bose.co.il/cdn/shop/files/86_1000x.png?v=1749727895", "AUDIO_EQUIPMENT");
@@ -372,7 +402,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("Audio-Technica AT-LP120X", 349.99, "https://m.media-amazon.com/images/I/61SAte9QzkL.jpg", "AUDIO_EQUIPMENT");
         fbHelper.uploadSingleProduct("Beats Studio Pro", 349.99, "https://m.media-amazon.com/images/I/61u-OaDSfQL._AC_UF894,1000_QL80_.jpg", "AUDIO_EQUIPMENT");
 
-        // SMARTPHONES
         fbHelper.uploadSingleProduct("iPhone 15 Pro Max 1TB", 1599.99, "https://img.zap.co.il/pics/0/7/9/6/79366970c.gif", "SMARTPHONES");
         fbHelper.uploadSingleProduct("Samsung Galaxy S24 Ultra", 1299.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQKNkvqurPMB8FabyOSgTelVqy1y8HX1Mui5Q&s", "SMARTPHONES");
         fbHelper.uploadSingleProduct("Google Pixel 8 Pro", 999.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQdyH2Om768gdygNfEci_RqXtR3Z0wx-oDVDA&s", "SMARTPHONES");
@@ -386,23 +415,18 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("iPhone SE 2024", 429.99, "https://i.redd.it/iphone-se-4th-gen-2024-v0-x939lzbxtfic1.jpg?width=4000&format=pjpg&auto=webp&s=966f57f15908082e025350bc0314f0b021c1eca6", "SMARTPHONES");
         fbHelper.uploadSingleProduct("Samsung Galaxy Z Flip5", 999.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTBrlcCse_oWXr-PepYJKa8083gPqVqOetJnw&s", "SMARTPHONES");
 
-        // CAMERAS
         fbHelper.uploadSingleProduct("Canon EOS R5 Mirrorless", 3899.99, "https://d3m9l0v76dty0.cloudfront.net/system/photos/5240671/large/8f1981cd0e63635905fd91c6d1f468c1.jpg", "CAMERAS");
         fbHelper.uploadSingleProduct("Sony A7 IV Camera", 2499.99, "https://m.media-amazon.com/images/I/71BaBwNek-L.jpg", "CAMERAS");
         fbHelper.uploadSingleProduct("Nikon Z9 Mirrorless", 5499.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSDsKvz44GiTrdLgm4poJZhxCdq4-ydaoBE2w&s", "CAMERAS");
         fbHelper.uploadSingleProduct("GoPro HERO12 Black", 399.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ-IWL_3tLQkqZq4UYN-TAZzLMawV6KUp0wYg&s", "CAMERAS");
         fbHelper.uploadSingleProduct("DJI Mini 4 Pro Drone", 759.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTCtuIsnCCD1fcln5vLJplbDtwfJ-wMU8dmoA&s", "CAMERAS");
         fbHelper.uploadSingleProduct("Fujifilm X-T5", 1699.99, "https://img.zap.co.il/pics/3/3/9/0/74890933c.gif", "CAMERAS");
-
-        // 💡 CRITICAL FIX: Removed the slashes from these two lines!
         fbHelper.uploadSingleProduct("Canon 70-200mm f2.8 Lens", 2099.99, "https://cdn.media.amplience.net/i/canon/zoom-lens-ef-70-200mm-l-is-ii-usm-fsl-w-cap_7fb75a0151624ddfadc3cec199378c96", "CAMERAS");
         fbHelper.uploadSingleProduct("Sony 24-70mm f2.8 Lens", 2199.99, "https://www.sony.co.il/image/9a3029fb7027dcc88601afba0d8c6bf9?fmt=pjpeg&wid=1200&hei=470&bgcolor=F1F5F9&bgc=F1F5F9", "CAMERAS");
-
         fbHelper.uploadSingleProduct("Insta360 X3 Camera", 449.99, "https://cellfi.co.il/wp-content/uploads/2025/02/insta360.jpg", "CAMERAS");
         fbHelper.uploadSingleProduct("Canon PowerShot G7 X", 749.99, "https://img.zap.co.il/pics/2/2/4/0/92820422c.gif", "CAMERAS");
         fbHelper.uploadSingleProduct("Sony A7C II Camera", 2199.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcST3abZLTSbHyIO5RCxECoRpw33fxJvHJicgw&s", "CAMERAS");
 
-        // NETWORKING
         fbHelper.uploadSingleProduct("ASUS ROG Rapture WiFi 6", 449.99, "https://www.payngo.co.il/cdn-cgi/image/format=auto,metadata=none,quality=90,width=700,height=700/media/catalog/product/c/b/cbb222d7-c677-42b8-8faa-gfhbr.png", "NETWORKING");
         fbHelper.uploadSingleProduct("TP-Link Archer AXE95", 399.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTj3S444qF684K8_Tqg0F3qAPnFjZaxaHVuBQ&s", "NETWORKING");
         fbHelper.uploadSingleProduct("Netgear Orbi WiFi 6E", 899.99, "https://www.netgear.com/uk/media/RBKE963B-NEW_tcm158-152296.webp", "NETWORKING");
@@ -422,7 +446,6 @@ public class MainActivity extends AppCompatActivity {
         fbHelper.uploadSingleProduct("Wireless Access Point", 129.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_0bWIvNkvL64AN8syVoZ838RNEovpfk0Ymg&s", "NETWORKING");
         fbHelper.uploadSingleProduct("Network Attached Storage", 599.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR4xrQibQu590kPiy9bqdXaWt8wa6a1e53clA&s", "NETWORKING");
 
-        // SMART HOME
         fbHelper.uploadSingleProduct("Amazon Echo Show 15", 249.99, "https://m.media-amazon.com/images/I/61xQl81iYQL._UF1000,1000_QL80_.jpg", "SMART_HOME");
         fbHelper.uploadSingleProduct("Google Nest Hub Max", 229.99, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRL2hc4dlUPbIlkwWNvy8ibBTvvRTg9XVW7vw&s", "SMART_HOME");
         fbHelper.uploadSingleProduct("Philips Hue Starter Kit", 199.99, "https://www.assets.signify.com/is/image/Signify/046677563080-929002469109-Philips-Hue_W-10_5W-A19-E26-2set-US-RTP", "SMART_HOME");

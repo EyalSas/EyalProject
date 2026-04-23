@@ -49,31 +49,30 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * A fragment that displays the main store interface.
+ * It manages product fetching, categorization, search filtering,
+ * and user interactions such as viewing product details and adding items to the cart.
+ */
 public class StoreFragment extends Fragment {
 
-    // ── Views ──────────────────────────────────────────────────────────────────
     private RecyclerView recyclerViewMain;
-    private LinearLayout skeletonLayout;   // built entirely in Java
+    private LinearLayout skeletonLayout;
     private Spinner spinnerFilter;
     private TextInputEditText editTextSearch;
     private PopupWindow activePopupWindow;
 
-    // The main adapter that handles the vertical list of categories
     private CategoryAdapter categoryAdapter;
 
-    // ── App-level singletons (survive fragment destroy/recreate) ───────────────
     private static FirebaseHelper fbHelper;
     private static final Map<String, List<FirebaseHelper.Product>> productCache = new LinkedHashMap<>();
     private static final Set<String> prewarmedFilters = new HashSet<>();
 
-    // ── State ──────────────────────────────────────────────────────────────────
-    private String selectedFilter     = "All";
+    private String selectedFilter = "All";
     private String currentSearchQuery = "";
 
-    // Glide options built once, reused for every card
     private RequestOptions glideOptions;
 
-    // ── Threading (Optimized) ──────────────────────────────────────────────────
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
     private final Runnable searchRunnable = () -> {
@@ -81,14 +80,16 @@ public class StoreFragment extends Fragment {
         if (cached != null) filterAndRender(cached);
     };
 
-    // ── Shimmer animator ───────────────────────────────────────────────────────
     private ValueAnimator shimmerAnimator;
 
-    // ── dp helper (set once in onCreateView) ──────────────────────────────────
     private float dp;
 
-    // ── Lifecycle ──────────────────────────────────────────────────────────────
-
+    /**
+     * Called to do initial creation of the fragment.
+     * Retains the instance across configuration changes.
+     *
+     * @param savedInstanceState If the fragment is being re-created from a previous saved state, this is the state.
+     */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -96,6 +97,15 @@ public class StoreFragment extends Fragment {
         setRetainInstance(true);
     }
 
+    /**
+     * Called to have the fragment instantiate its user interface view.
+     * Initializes views, sets up adapters, configures glide, and triggers the initial product load.
+     *
+     * @param inflater           The LayoutInflater object that can be used to inflate any views in the fragment.
+     * @param container          If non-null, this is the parent view that the fragment's UI should be attached to.
+     * @param savedInstanceState If non-null, this fragment is being re-constructed from a previous saved state.
+     * @return Return the View for the fragment's UI, or null.
+     */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
@@ -121,6 +131,10 @@ public class StoreFragment extends Fragment {
         return root;
     }
 
+    /**
+     * Called when the view previously created by onCreateView has been detached from the fragment.
+     * Cleans up handlers, animations, and open popups to prevent memory leaks.
+     */
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -130,22 +144,27 @@ public class StoreFragment extends Fragment {
             activePopupWindow.dismiss();
             activePopupWindow = null;
         }
-        // We do not shutdown the executor so it survives fragment replacements
     }
 
-    // ── Init ───────────────────────────────────────────────────────────────────
-
+    /**
+     * Initializes the core UI components and sets up the primary vertical RecyclerView.
+     *
+     * @param root The root view of the fragment's layout.
+     */
     private void initViews(View root) {
         recyclerViewMain = root.findViewById(R.id.recyclerViewMain);
         spinnerFilter    = root.findViewById(R.id.spinnerFilter);
         editTextSearch   = root.findViewById(R.id.editTextSearch);
 
-        // Setup the main vertical RecyclerView
         recyclerViewMain.setLayoutManager(new LinearLayoutManager(requireContext()));
         categoryAdapter = new CategoryAdapter(new ArrayList<>());
         recyclerViewMain.setAdapter(categoryAdapter);
     }
 
+    /**
+     * Programmatically constructs the skeleton loading layout to provide
+     * visual feedback while product data is being fetched.
+     */
     private void buildSkeletonLayout() {
         skeletonLayout = new LinearLayout(requireContext());
         skeletonLayout.setOrientation(LinearLayout.VERTICAL);
@@ -157,16 +176,20 @@ public class StoreFragment extends Fragment {
 
         skeletonLayout.setLayoutParams(fullWidth);
 
-        // Build 2 skeleton sections
-        skeletonLayout.addView(buildSkeletonSection(110));  // wider title bar
-        skeletonLayout.addView(buildSkeletonSection(80));   // narrower title bar
+        skeletonLayout.addView(buildSkeletonSection(110));
+        skeletonLayout.addView(buildSkeletonSection(80));
 
-        // Insert into root right above the main RecyclerView
         ViewGroup root = (ViewGroup) recyclerViewMain.getParent();
         int scrollIndex = root.indexOfChild(recyclerViewMain);
         root.addView(skeletonLayout, scrollIndex);
     }
 
+    /**
+     * Builds a single horizontal section of the skeleton layout, representing a product category.
+     *
+     * @param titleWidthDp The width in density-independent pixels for the category title placeholder.
+     * @return A LinearLayout configured as a skeleton section.
+     */
     private LinearLayout buildSkeletonSection(int titleWidthDp) {
         LinearLayout section = new LinearLayout(requireContext());
         section.setOrientation(LinearLayout.VERTICAL);
@@ -202,6 +225,11 @@ public class StoreFragment extends Fragment {
         return section;
     }
 
+    /**
+     * Builds an individual skeleton product card.
+     *
+     * @return A LinearLayout representing a placeholder product card.
+     */
     private LinearLayout buildSkeletonCard() {
         LinearLayout card = new LinearLayout(requireContext());
         card.setOrientation(LinearLayout.VERTICAL);
@@ -219,6 +247,16 @@ public class StoreFragment extends Fragment {
         return card;
     }
 
+    /**
+     * Creates a generic skeleton block to act as a placeholder for text or images.
+     *
+     * @param widthDp     The block width in density-independent pixels, or a LayoutParams constant.
+     * @param heightDp    The block height in density-independent pixels.
+     * @param topMarginDp The top margin in density-independent pixels.
+     * @param color       The hex color code for the block background.
+     * @param radiusDp    The corner radius in density-independent pixels.
+     * @return The configured View object.
+     */
     private View skeletonBlock(int widthDp, int heightDp, int topMarginDp, String color, int radiusDp) {
         View v = new View(requireContext());
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
@@ -230,8 +268,10 @@ public class StoreFragment extends Fragment {
         return v;
     }
 
-    // ── Spinner + Search ───────────────────────────────────────────────────────
-
+    /**
+     * Configures the category filter spinner and attaches an item selection listener
+     * to trigger product reloads upon category change.
+     */
     private void setupSpinner() {
         try {
             ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
@@ -258,6 +298,10 @@ public class StoreFragment extends Fragment {
         });
     }
 
+    /**
+     * Sets up the search input field with a text watcher. Triggers a delayed search
+     * routine to filter the currently loaded product list.
+     */
     private void setupSearch() {
         editTextSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
@@ -273,8 +317,10 @@ public class StoreFragment extends Fragment {
         });
     }
 
-    // ── Data ───────────────────────────────────────────────────────────────────
-
+    /**
+     * Initiates the loading of products from the Firebase database or retrieves them
+     * from the local cache if previously fetched. Manages the skeleton loading state.
+     */
     private void loadProducts() {
         List<FirebaseHelper.Product> cached = productCache.get(selectedFilter);
         if (cached != null) {
@@ -313,7 +359,12 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    /** Pre-decodes images using the Executor pool instead of raw threads. */
+    /**
+     * Preloads product images in the background to ensure smoother scrolling
+     * when the user interacts with the horizontal lists.
+     *
+     * @param products The list of products whose images should be preloaded.
+     */
     private void prewarmImages(List<FirebaseHelper.Product> products) {
         if (prewarmedFilters.contains(selectedFilter)) return;
         prewarmedFilters.add(selectedFilter);
@@ -331,8 +382,12 @@ public class StoreFragment extends Fragment {
         });
     }
 
-    // ── Filter + Render ────────────────────────────────────────────────────────
-
+    /**
+     * Filters a list of products based on the current search query and organizes them
+     * into categorized groupings before dispatching them to the main adapter.
+     *
+     * @param source The unfiltered list of products to process.
+     */
     private void filterAndRender(List<FirebaseHelper.Product> source) {
         if (source == null || !isAdded()) return;
 
@@ -359,30 +414,49 @@ public class StoreFragment extends Fragment {
             newCategories.add(new CategoryData(display, entry.getValue()));
         }
 
-        // Pass new data directly to the adapter
         categoryAdapter.updateData(newCategories);
     }
 
-    // ── RecyclerView Adapters ──────────────────────────────────────────────────
-
-    /** Simple POJO holding a category name and its products */
+    /**
+     * A simple data object representing a categorized group of products.
+     */
     private static class CategoryData {
         String name;
         List<FirebaseHelper.Product> products;
+
+        /**
+         * Constructs a new CategoryData instance.
+         *
+         * @param name     The display name of the category.
+         * @param products The list of products belonging to this category.
+         */
         CategoryData(String name, List<FirebaseHelper.Product> products) {
             this.name = name;
             this.products = products;
         }
     }
 
-    /** Vertical Adapter: Renders Categories */
+    /**
+     * An adapter for the main vertical RecyclerView, responsible for displaying
+     * category headers and initializing nested horizontal RecyclerViews for products.
+     */
     private class CategoryAdapter extends RecyclerView.Adapter<CategoryAdapter.CategoryViewHolder> {
         private List<CategoryData> categories;
 
+        /**
+         * Constructs a CategoryAdapter.
+         *
+         * @param categories The initial list of category data to display.
+         */
         CategoryAdapter(List<CategoryData> categories) {
             this.categories = categories;
         }
 
+        /**
+         * Updates the adapter's underlying data set and refreshes the layout.
+         *
+         * @param newData The new list of category data.
+         */
         void updateData(List<CategoryData> newData) {
             this.categories = newData;
             notifyDataSetChanged();
@@ -391,7 +465,6 @@ public class StoreFragment extends Fragment {
         @NonNull
         @Override
         public CategoryViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            // Build the layout programmatically to avoid requiring new XML files
             LinearLayout layout = new LinearLayout(parent.getContext());
             layout.setOrientation(LinearLayout.VERTICAL);
             layout.setLayoutParams(new ViewGroup.LayoutParams(
@@ -410,7 +483,6 @@ public class StoreFragment extends Fragment {
             horizontalRecycler.setClipToPadding(false);
             horizontalRecycler.setPadding(px(8), 0, px(8), 0);
 
-            // Allow child recyclers to scroll horizontally
             horizontalRecycler.setLayoutManager(new LinearLayoutManager(
                     parent.getContext(), LinearLayoutManager.HORIZONTAL, false));
 
@@ -424,7 +496,6 @@ public class StoreFragment extends Fragment {
             CategoryData data = categories.get(position);
             holder.title.setText(data.name);
 
-            // Re-use or create the inner product adapter
             ProductAdapter productAdapter = new ProductAdapter(data.products);
             holder.productRecycler.setAdapter(productAdapter);
         }
@@ -434,10 +505,20 @@ public class StoreFragment extends Fragment {
             return categories.size();
         }
 
+        /**
+         * View holder pattern implementation for category rows.
+         */
         class CategoryViewHolder extends RecyclerView.ViewHolder {
             TextView title;
             RecyclerView productRecycler;
 
+            /**
+             * Constructs a CategoryViewHolder.
+             *
+             * @param itemView        The parent layout containing the category UI.
+             * @param title           The TextView displaying the category name.
+             * @param productRecycler The nested RecyclerView handling the product list.
+             */
             CategoryViewHolder(View itemView, TextView title, RecyclerView productRecycler) {
                 super(itemView);
                 this.title = title;
@@ -446,10 +527,18 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    /** Horizontal Adapter: Renders individual product cards */
+    /**
+     * An adapter for the nested horizontal RecyclerViews, responsible for managing
+     * individual product cards, quantities, and purchase actions.
+     */
     private class ProductAdapter extends RecyclerView.Adapter<ProductAdapter.ProductViewHolder> {
         private final List<FirebaseHelper.Product> products;
 
+        /**
+         * Constructs a ProductAdapter.
+         *
+         * @param products The list of products to populate within the nested list.
+         */
         ProductAdapter(List<FirebaseHelper.Product> products) {
             this.products = products;
         }
@@ -468,7 +557,7 @@ public class StoreFragment extends Fragment {
 
             holder.name.setText(p.name);
             holder.price.setText(String.format(Locale.ROOT, "$%.2f", p.price));
-            holder.counter.setText("0"); // Reset counter when recycling
+            holder.counter.setText("0");
 
             try {
                 Glide.with(StoreFragment.this)
@@ -505,11 +594,19 @@ public class StoreFragment extends Fragment {
             return products.size();
         }
 
+        /**
+         * View holder pattern implementation for individual product items.
+         */
         class ProductViewHolder extends RecyclerView.ViewHolder {
             ImageView image;
             TextView name, price, counter;
             Button btnMinus, btnPlus, btnBuy;
 
+            /**
+             * Constructs a ProductViewHolder.
+             *
+             * @param view The root view of the product card layout.
+             */
             ProductViewHolder(View view) {
                 super(view);
                 image = view.findViewById(R.id.imageViewProduct);
@@ -523,6 +620,13 @@ public class StoreFragment extends Fragment {
         }
     }
 
+    /**
+     * Extracts an integer quantity from the provided TextView, defaulting to zero
+     * if the text is invalid or malformed.
+     *
+     * @param counter The TextView containing the quantity value.
+     * @return The parsed integer quantity, or 0 if parsing fails.
+     */
     private int getSafeQuantity(TextView counter) {
         try {
             return Integer.parseInt(counter.getText().toString().trim());
@@ -531,8 +635,13 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    // ── Popup & Purchase Logic ─────────────────────────────────────────────────
-
+    /**
+     * Displays a centered popup window featuring an enlarged product image and details.
+     *
+     * @param name     The product name.
+     * @param imageUrl The URL of the product image.
+     * @param price    The product price.
+     */
     private void showProductPopup(String name, String imageUrl, double price) {
         if (getContext() == null || getView() == null) return;
 
@@ -570,6 +679,14 @@ public class StoreFragment extends Fragment {
                 .setOnClickListener(v -> activePopupWindow.dismiss());
     }
 
+    /**
+     * Initiates the process of adding a specified quantity of a product to the user's cart.
+     * Warns the user if they are not authenticated.
+     *
+     * @param name  The product name.
+     * @param price The unit price of the product.
+     * @param qty   The quantity to add to the cart.
+     */
     private void purchaseProduct(String name, double price, int qty) {
         if (fbHelper.getCurrentUserId() == null) {
             showSnackbar("Error: User session not found. Please log in.");
@@ -580,8 +697,12 @@ public class StoreFragment extends Fragment {
                 Toast.LENGTH_SHORT).show();
     }
 
-    // ── Skeleton shimmer ───────────────────────────────────────────────────────
-
+    /**
+     * Toggles the visibility state between the skeleton loading layout and the
+     * main product RecyclerView. Controls the shimmer animation status accordingly.
+     *
+     * @param show True to display the skeleton layout, false to show the actual content.
+     */
     private void showSkeleton(boolean show) {
         if (skeletonLayout == null) return;
         if (show) {
@@ -595,6 +716,9 @@ public class StoreFragment extends Fragment {
         }
     }
 
+    /**
+     * Instantiates and starts the pulsing opacity animation attached to the skeleton layout.
+     */
     private void startShimmer() {
         shimmerAnimator = ValueAnimator.ofFloat(0.3f, 1f);
         shimmerAnimator.setDuration(850);
@@ -607,6 +731,9 @@ public class StoreFragment extends Fragment {
         shimmerAnimator.start();
     }
 
+    /**
+     * Cancels the active skeleton shimmer animation and nullifies its reference.
+     */
     private void stopShimmer() {
         if (shimmerAnimator != null) {
             shimmerAnimator.cancel();
@@ -614,8 +741,11 @@ public class StoreFragment extends Fragment {
         }
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────────
-
+    /**
+     * Displays a brief Snackbar message to the user at the bottom of the view.
+     *
+     * @param message The text message to display.
+     */
     private void showSnackbar(String message) {
         if (getView() != null) {
             Snackbar.make(requireView(), message, Snackbar.LENGTH_LONG)
@@ -624,6 +754,13 @@ public class StoreFragment extends Fragment {
         }
     }
 
+    /**
+     * Creates a rounded rectangle drawable dynamically for use as view backgrounds.
+     *
+     * @param hex      The hex color string.
+     * @param radiusDp The corner radius in density-independent pixels.
+     * @return A styled GradientDrawable.
+     */
     private Drawable roundRect(String hex, int radiusDp) {
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.RECTANGLE);
@@ -632,5 +769,12 @@ public class StoreFragment extends Fragment {
         return d;
     }
 
+    /**
+     * Converts a density-independent pixel (dp) value into an exact pixel count based
+     * on the current device screen density.
+     *
+     * @param dp The dimension in dp.
+     * @return The rounded integer pixel equivalent.
+     */
     private int px(int dp) { return Math.round(dp * this.dp); }
 }

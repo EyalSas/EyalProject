@@ -13,19 +13,26 @@ import com.example.eyalproject.MainActivity;
 import com.example.eyalproject.R;
 
 /**
- * BroadcastReceiver responsible for handling system broadcasts (like Alarms)
- * and triggering local notifications, primarily for purchase confirmations.
+ * A BroadcastReceiver responsible for handling system-level broadcasts and triggering
+ * local notifications. It primarily handles asynchronous alerts such as purchase
+ * confirmations and new service request notifications.
  */
 public class CartReminderReceiver extends BroadcastReceiver {
 
     private static final String CHANNEL_ID = "PURCHASE_CHANNEL";
-    private static final int NOTIFICATION_ID = 2; // Unique ID for the notification type.
+    private static final int NOTIFICATION_ID = 2;
 
+    /**
+     * Receives the broadcast intent, extracts the embedded action, title, and message data,
+     * and triggers the corresponding local notification.
+     *
+     * @param context The Context in which the receiver is running.
+     * @param intent  The Intent being received containing action and string extras.
+     */
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
 
-        // 1. Get the message and initialize the title
         String message = intent.getStringExtra("message");
         String title = "Notification";
 
@@ -33,7 +40,6 @@ public class CartReminderReceiver extends BroadcastReceiver {
             message = "A notification event occurred.";
         }
 
-        // 2. Determine the correct title based on the action
         if ("PURCHASE_CONFIRMATION".equals(action)) {
             title = "Purchase Confirmation";
         } else if ("NEW_SERVICE_REQUEST".equals(action)) {
@@ -43,10 +49,17 @@ public class CartReminderReceiver extends BroadcastReceiver {
             }
         }
 
-        // 3. Show the notification with the determined title
         showNotification(context, title, message);
     }
 
+    /**
+     * Constructs and displays a system notification using the NotificationCompat API.
+     * Sets up a PendingIntent to launch the MainActivity when the notification is tapped.
+     *
+     * @param context The Context used to access the NotificationManager.
+     * @param title   The title text for the notification.
+     * @param message The detailed body text for the notification.
+     */
     private void showNotification(Context context, String title, String message) {
         createNotificationChannel(context);
 
@@ -74,6 +87,12 @@ public class CartReminderReceiver extends BroadcastReceiver {
         notificationManager.notify(NOTIFICATION_ID, builder.build());
     }
 
+    /**
+     * Creates the necessary NotificationChannel for devices running Android 8.0 (Oreo) and above.
+     * This is required for notifications to be delivered successfully on newer Android versions.
+     *
+     * @param context The Context used to access system services.
+     */
     private void createNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             CharSequence name = "Purchase Notifications";

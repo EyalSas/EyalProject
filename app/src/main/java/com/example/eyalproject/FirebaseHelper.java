@@ -19,36 +19,38 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+/**
+ * A helper class that centralizes all interactions with Firebase Authentication
+ * and Firebase Firestore. It provides a singleton instance for Firestore to
+ * manage offline persistence and provides abstracted methods for user management,
+ * product retrieval, cart operations, and checkout history.
+ */
 public class FirebaseHelper {
 
     private static final String TAG = "FirebaseHelper";
-
-    // ── Singletons ─────────────────────────────────────────────────────────────
-    // Reusing the same Auth + Firestore instances across all FirebaseHelper
-    // objects eliminates repeated getInstance() overhead and listener re-registration.
-
     private static FirebaseFirestore dbInstance;
     private final FirebaseAuth auth;
     private final FirebaseFirestore db;
 
+    /**
+     * Initializes the FirebaseHelper by acquiring the FirebaseAuth instance
+     * and the singleton FirebaseFirestore instance.
+     */
     public FirebaseHelper() {
         auth = FirebaseAuth.getInstance();
         db   = getDb();
     }
 
     /**
-     * Returns a singleton Firestore instance with offline persistence enabled.
+     * Retrieves a singleton instance of FirebaseFirestore configured with offline persistence.
      *
-     * Offline persistence means:
-     *  • First launch reads from disk cache instantly (0 ms), then syncs in background.
-     *  • Subsequent launches are instant even with no network.
-     *  • No duplicate Settings configuration if called multiple times.
+     * @return The configured FirebaseFirestore singleton instance.
      */
     private static synchronized FirebaseFirestore getDb() {
         if (dbInstance == null) {
             dbInstance = FirebaseFirestore.getInstance();
             FirebaseFirestoreSettings settings = new FirebaseFirestoreSettings.Builder()
-                    .setPersistenceEnabled(true)       // ✅ local disk cache
+                    .setPersistenceEnabled(true)
                     .setCacheSizeBytes(FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED)
                     .build();
             dbInstance.setFirestoreSettings(settings);
@@ -56,17 +58,35 @@ public class FirebaseHelper {
         return dbInstance;
     }
 
-    // ==========================================================================
-    // 1. AUTHENTICATION
-    // ==========================================================================
-
+    /**
+     * Callback interface for authentication operations.
+     */
     public interface AuthCallback {
+        /**
+         * Called when the authentication process succeeds.
+         *
+         * @param username The username of the successfully authenticated user.
+         */
         void onSuccess(String username);
+
+        /**
+         * Called when the authentication process fails.
+         *
+         * @param error A description of the error that occurred.
+         */
         void onFailure(String error);
     }
 
-    public void registerUser(String username, String email, String password,
-                             AuthCallback callback) {
+    /**
+     * Registers a new user using their email and password, and saves their username to Firestore.
+     * Prevents registration if the username is already taken.
+     *
+     * @param username The desired username.
+     * @param email    The user's email address.
+     * @param password The user's password.
+     * @param callback The callback to trigger upon success or failure.
+     */
+    public void registerUser(String username, String email, String password, AuthCallback callback) {
         db.collection("users").whereEqualTo("username", username).get()
                 .addOnSuccessListener(snap -> {
                     if (!snap.isEmpty()) {
@@ -92,6 +112,14 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onFailure("Database connection failed."));
     }
 
+    /**
+     * Logs in an existing user by their username. This method looks up the associated
+     * email address in Firestore first, then authenticates with Firebase Auth.
+     *
+     * @param username The user's username.
+     * @param password The user's password.
+     * @param callback The callback to trigger upon success or failure.
+     */
     public void loginUserByUsername(String username, String password, AuthCallback callback) {
         db.collection("users").whereEqualTo("username", username).get()
                 .addOnSuccessListener(snap -> {
@@ -111,14 +139,18 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onFailure("Database connection failed."));
     }
 
+    /**
+     * Retrieves the Unique ID of the currently authenticated user.
+     *
+     * @return The current user's UID, or null if no user is logged in.
+     */
     public String getCurrentUserId() {
         return auth.getCurrentUser() != null ? auth.getCurrentUser().getUid() : null;
     }
 
-    // ==========================================================================
-    // 2. PRODUCTS
-    // ==========================================================================
-
+    /**
+     * Represents a product available in the store.
+     */
     public static class Product {
         public String name;
         public double price;
@@ -126,33 +158,49 @@ public class FirebaseHelper {
         public String type;
     }
 
+    /**
+     * Callback interface for retrieving product data.
+     */
     public interface ProductsCallback {
+        /**
+         * Called when the list of products is successfully loaded.
+         *
+         * @param products The loaded list of products.
+         */
         void onProductsLoaded(List<Product> products);
+
+        /**
+         * Called when an error occurs during product retrieval.
+         *
+         * @param error A description of the error.
+         */
         void onError(String error);
     }
 
     /**
-     * Cache-first product fetch strategy:
+     * Retrieves all products from Firestore using a cache-first strategy.
+     * If the cache is empty, it falls back to fetching from the network.
      *
-     *  1. Try disk/memory cache immediately (Source.CACHE) → near-instant response.
-     *  2. If cache miss, fall back to network automatically.
-     *
-     * This makes the store feel instant on every subsequent open.
+     * @param callback The callback to return the list of products or an error.
      */
     public void getAllProducts(ProductsCallback callback) {
         db.collection("products")
-                .get(Source.CACHE)                         // ✅ Try cache first
+                .get(Source.CACHE)
                 .addOnSuccessListener(snap -> {
                     if (!snap.isEmpty()) {
                         callback.onProductsLoaded(parseProducts(snap));
                     } else {
-                        // Cache empty → go to network
                         fetchAllProductsFromNetwork(callback);
                     }
                 })
-                .addOnFailureListener(e -> fetchAllProductsFromNetwork(callback)); // cache miss
+                .addOnFailureListener(e -> fetchAllProductsFromNetwork(callback));
     }
 
+    /**
+     * Fetches all products directly from the Firestore network.
+     *
+     * @param callback The callback to return the list of products or an error.
+     */
     private void fetchAllProductsFromNetwork(ProductsCallback callback) {
         db.collection("products")
                 .get(Source.SERVER)
@@ -160,10 +208,16 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onError(e.getMessage()));
     }
 
+    /**
+     * Retrieves products filtered by a specific category type using a cache-first strategy.
+     *
+     * @param productType The category type to filter by.
+     * @param callback    The callback to return the list of filtered products or an error.
+     */
     public void getProductsByType(String productType, ProductsCallback callback) {
         db.collection("products")
                 .whereEqualTo("type", productType)
-                .get(Source.CACHE)                         // ✅ Try cache first
+                .get(Source.CACHE)
                 .addOnSuccessListener(snap -> {
                     if (!snap.isEmpty()) {
                         callback.onProductsLoaded(parseProducts(snap));
@@ -174,6 +228,12 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> fetchProductsByTypeFromNetwork(productType, callback));
     }
 
+    /**
+     * Fetches products filtered by a specific category type directly from the Firestore network.
+     *
+     * @param productType The category type to filter by.
+     * @param callback    The callback to return the list of filtered products or an error.
+     */
     private void fetchProductsByTypeFromNetwork(String productType, ProductsCallback callback) {
         db.collection("products")
                 .whereEqualTo("type", productType)
@@ -182,7 +242,12 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onError(e.getMessage()));
     }
 
-    /** Shared parser — avoids duplicated field-reading code across all product queries. */
+    /**
+     * Parses a Firestore QuerySnapshot into a list of Product objects.
+     *
+     * @param snap The QuerySnapshot returned from Firestore.
+     * @return A list of populated Product objects.
+     */
     private List<Product> parseProducts(com.google.firebase.firestore.QuerySnapshot snap) {
         List<Product> list = new ArrayList<>(snap.size());
         for (QueryDocumentSnapshot doc : snap) {
@@ -196,26 +261,45 @@ public class FirebaseHelper {
         return list;
     }
 
+    /**
+     * Uploads a single product record to the Firestore database.
+     * Replaces slashes in the product name to ensure valid document IDs.
+     *
+     * @param name     The product name.
+     * @param price    The product price.
+     * @param imageUrl The URL of the product image.
+     * @param type     The product category type.
+     */
     public void uploadSingleProduct(String name, double price, String imageUrl, String type) {
         Map<String, Object> product = new HashMap<>();
         product.put("name", name);
         product.put("price", price);
         product.put("imageUrl", imageUrl);
         product.put("type", type);
-        // Replace forward slashes so Firebase doesn't treat them as path separators.
         String safeId = name.replace("/", "-");
         db.collection("products").document(safeId).set(product);
     }
 
-    // ==========================================================================
-    // 3. CART & CHECKOUT
-    // ==========================================================================
-
+    /**
+     * Generic callback interface for general actions.
+     */
     public interface ActionCallback {
+        /**
+         * Called when the action successfully completes.
+         */
         void onSuccess();
+
+        /**
+         * Called when the action fails.
+         *
+         * @param error A description of the error.
+         */
         void onFailure(String error);
     }
 
+    /**
+     * Represents a single item stored within a user's cart.
+     */
     public static class CartItem {
         public String documentId;
         public String productName;
@@ -223,11 +307,33 @@ public class FirebaseHelper {
         public int quantity;
     }
 
+    /**
+     * Callback interface for cart retrieval operations.
+     */
     public interface CartCallback {
+        /**
+         * Called when the user's cart items are successfully loaded.
+         *
+         * @param items    The list of items in the cart.
+         * @param totalSum The total calculated price of all items in the cart.
+         */
         void onCartLoaded(List<CartItem> items, double totalSum);
+
+        /**
+         * Called when an error occurs during cart retrieval.
+         *
+         * @param error A description of the error.
+         */
         void onError(String error);
     }
 
+    /**
+     * Adds a specific quantity of a product to the currently authenticated user's cart.
+     *
+     * @param productName The name of the product being added.
+     * @param price       The unit price of the product.
+     * @param quantity    The amount of the product being added.
+     */
     public void addToCart(String productName, double price, int quantity) {
         String uid = getCurrentUserId();
         if (uid == null) return;
@@ -243,6 +349,11 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> Log.e(TAG, "Cart add failed", e));
     }
 
+    /**
+     * Retrieves all items currently in the authenticated user's cart.
+     *
+     * @param callback The callback returning the cart items and the calculated total sum.
+     */
     public void getCartItems(CartCallback callback) {
         String uid = getCurrentUserId();
         if (uid == null) { callback.onError("User not logged in"); return; }
@@ -268,6 +379,12 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onError(e.getMessage()));
     }
 
+    /**
+     * Deletes a specific item from the user's cart based on its Firestore document ID.
+     *
+     * @param documentId The Firestore document ID of the cart item.
+     * @param callback   The callback indicating success or failure of the deletion.
+     */
     public void deleteCartItem(String documentId, ActionCallback callback) {
         String uid = getCurrentUserId();
         if (uid == null) { callback.onFailure("User not logged in"); return; }
@@ -278,10 +395,23 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onFailure(e.getMessage()));
     }
 
+    /**
+     * Callback interface for returning the count of items in a cart.
+     */
     public interface CartCountCallback {
+        /**
+         * Called with the total number of items in the cart.
+         *
+         * @param count The number of distinct cart items.
+         */
         void onCountRetrieved(int count);
     }
 
+    /**
+     * Retrieves the total count of distinct items in the user's cart.
+     *
+     * @param callback The callback that returns the total count.
+     */
     public void getCartItemCount(CartCountCallback callback) {
         String uid = getCurrentUserId();
         if (uid == null) { callback.onCountRetrieved(0); return; }
@@ -291,11 +421,31 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onCountRetrieved(0));
     }
 
+    /**
+     * Callback interface for the checkout process.
+     */
     public interface CheckoutCallback {
+        /**
+         * Called when the checkout process and cart clearing is entirely successful.
+         */
         void onSuccess();
+
+        /**
+         * Called when any part of the checkout process fails.
+         *
+         * @param error A description of the error.
+         */
         void onFailure(String error);
     }
 
+    /**
+     * Completes a checkout by generating a receipt from the current cart contents,
+     * saving it to the user's receipt history, and then clearing the active cart.
+     *
+     * @param receiptContent A string representation of the receipt details.
+     * @param totalSum       The total price of the completed checkout.
+     * @param callback       The callback indicating the success or failure of the operation.
+     */
     public void checkoutCart(String receiptContent, double totalSum, CheckoutCallback callback) {
         String uid = getCurrentUserId();
         if (uid == null) { callback.onFailure("User not logged in"); return; }
@@ -323,21 +473,39 @@ public class FirebaseHelper {
                 .addOnFailureListener(e -> callback.onFailure("Failed to save receipt: " + e.getMessage()));
     }
 
-    // ==========================================================================
-    // 4. HISTORY (Receipts)
-    // ==========================================================================
-
+    /**
+     * Represents a historical receipt from a completed checkout.
+     */
     public static class ReceiptItem {
         public String date;
         public double totalPrice;
         public String content;
     }
 
+    /**
+     * Callback interface for loading receipt history.
+     */
     public interface HistoryCallback {
+        /**
+         * Called when the user's receipt history is successfully loaded.
+         *
+         * @param historyList The chronological list of receipts.
+         */
         void onHistoryLoaded(List<ReceiptItem> historyList);
+
+        /**
+         * Called when an error occurs during history retrieval.
+         *
+         * @param error A description of the error.
+         */
         void onError(String error);
     }
 
+    /**
+     * Retrieves the authenticated user's chronological receipt history.
+     *
+     * @param callback The callback returning the list of receipts.
+     */
     public void getReceiptHistory(HistoryCallback callback) {
         String uid = getCurrentUserId();
         if (uid == null) { callback.onError("User not logged in"); return; }

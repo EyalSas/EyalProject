@@ -27,44 +27,45 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Fragment that displays company store locations using two modes:
- * a list view (RecyclerView) and a map view (Google Map).
- * The user can switch between these views using a floating action button.
+ * A fragment responsible for displaying company store locations. It offers a dual-view interface,
+ * allowing users to seamlessly toggle between a scrolling list representation using a RecyclerView
+ * and a geographical representation using an embedded Google Map.
  */
 public class AboutFragment extends Fragment implements OnMapReadyCallback {
 
-    // Google Map container and instance
     private MapView mapView;
     private GoogleMap googleMap;
 
-    // UI components
     private RecyclerView storesRecyclerView;
     private FloatingActionButton toggleFab;
 
-    // Data and adapter
     private List<Place> gameStores;
     private StoreAdapter storeAdapter;
 
-    // State flag to determine which view is currently displayed
     private boolean showingMap = false;
 
-    // Maps store IDs to their corresponding markers on the map
     private Map<String, Marker> markerMap = new HashMap<>();
 
+    /**
+     * Called to have the fragment instantiate its user interface view.
+     * Initializes the view bindings, populates the store data, sets up the RecyclerView,
+     * and asynchronously loads the Google Map instance.
+     *
+     * @param inflater           The LayoutInflater object that can be used to inflate any views in the fragment.
+     * @param container          If non-null, this is the parent view that the fragment's UI should be attached to.
+     * @param savedInstanceState If non-null, this fragment is being re-constructed from a previous saved state.
+     * @return Return the View for the fragment's UI.
+     */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        // Inflate the fragment layout
         View rootView = inflater.inflate(R.layout.fragment_about, container, false);
 
-        // Initialize UI components and data
         initializeViews(rootView);
         initializeGameStores();
         setupRecyclerView();
 
-        // Set click listener to toggle between list and map views
         toggleFab.setOnClickListener(v -> toggleView());
 
-        // Initialize MapView lifecycle and request map asynchronously
         if (mapView != null) {
             mapView.onCreate(savedInstanceState);
             mapView.getMapAsync(this);
@@ -74,7 +75,9 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Binds UI elements from the layout to class variables.
+     * Binds local variables to their corresponding UI elements within the inflated layout hierarchy.
+     *
+     * @param rootView The root view of the fragment layout.
      */
     private void initializeViews(View rootView) {
         mapView = rootView.findViewById(R.id.mapView);
@@ -83,7 +86,8 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Initializes a static list of store locations.
+     * Populates the internal data structure with predefined physical store locations,
+     * including geographical coordinates and contact information.
      */
     private void initializeGameStores() {
         gameStores = new ArrayList<>();
@@ -100,7 +104,8 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Configures the RecyclerView with a layout manager and adapter.
+     * Configures the RecyclerView by assigning a vertical layout manager and attaching
+     * the customized StoreAdapter, passing along a click listener to handle store selection.
      */
     private void setupRecyclerView() {
         storesRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
@@ -109,20 +114,20 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Callback triggered when the Google Map is ready to be used.
+     * Triggered by the Google Maps API when the map instance is fully initialized and ready
+     * for interaction. Applies UI configurations and plots the store markers.
+     *
+     * @param googleMap A non-null instance of a GoogleMap associated with the MapFragment or MapView.
      */
     @Override
     public void onMapReady(GoogleMap googleMap) {
         this.googleMap = googleMap;
 
-        // Configure map settings
         googleMap.getUiSettings().setZoomControlsEnabled(true);
         googleMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
 
-        // Add markers for all stores
         addStoreMarkers();
 
-        // Move camera to a default location (center of Israel)
         if (!gameStores.isEmpty()) {
             LatLng israelCenter = new LatLng(32.0853, 34.7818);
             googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(israelCenter, 8));
@@ -130,7 +135,8 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Adds markers to the map for each store location.
+     * Iterates through the stored list of locations, creates Google Map markers for each,
+     * and registers them in a local mapping structure for quick retrieval during interaction events.
      */
     private void addStoreMarkers() {
         if (googleMap == null) return;
@@ -150,7 +156,8 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Toggles between map view and list view.
+     * Toggles the visibility state between the list-based RecyclerView and the geographical MapView.
+     * Updates the icon of the Floating Action Button to reflect the opposite view state.
      */
     private void toggleView() {
         showingMap = !showingMap;
@@ -167,7 +174,11 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * Focuses the map camera on a selected store and shows its marker info.
+     * Animates the map's camera to focus on a specific store's coordinates and forces
+     * its associated informational marker window to display. Switches the UI to map mode
+     * if it is not currently active.
+     *
+     * @param store The Place object detailing the store to focus on.
      */
     private void focusOnStore(Place store) {
         if (!showingMap) {
@@ -184,7 +195,7 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * MapView lifecycle handling to prevent memory leaks.
+     * Called when the fragment is visible to the user. Delegates to the MapView lifecycle.
      */
     @Override
     public void onStart() {
@@ -192,30 +203,47 @@ public class AboutFragment extends Fragment implements OnMapReadyCallback {
         if (mapView != null) mapView.onStart();
     }
 
+    /**
+     * Called when the fragment is visible to the user and actively running. Delegates to the MapView lifecycle.
+     */
     @Override
     public void onResume() {
         super.onResume();
         if (mapView != null) mapView.onResume();
     }
 
+    /**
+     * Called when the Fragment is no longer resumed. Delegates to the MapView lifecycle.
+     */
     @Override
     public void onPause() {
         super.onPause();
         if (mapView != null) mapView.onPause();
     }
 
+    /**
+     * Called when the Fragment is no longer started. Delegates to the MapView lifecycle.
+     */
     @Override
     public void onStop() {
         super.onStop();
         if (mapView != null) mapView.onStop();
     }
 
+    /**
+     * Called when the view previously created by onCreateView has been detached from the fragment.
+     * Delegates to the MapView lifecycle to prevent memory leaks.
+     */
     @Override
     public void onDestroyView() {
         super.onDestroyView();
         if (mapView != null) mapView.onDestroy();
     }
 
+    /**
+     * Called when the overall system is running low on memory. Delegates to the MapView lifecycle
+     * to allow it to clear its internal memory caches.
+     */
     @Override
     public void onLowMemory() {
         super.onLowMemory();

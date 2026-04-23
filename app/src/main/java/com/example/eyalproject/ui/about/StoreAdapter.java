@@ -17,26 +17,32 @@ import com.google.android.material.button.MaterialButton;
 import java.util.List;
 
 /**
- * Adapter for displaying a list of stores in a RecyclerView.
- * Handles binding store data and user interactions (click, call, directions).
+ * An adapter responsible for managing and displaying a collection of physical store locations
+ * within a RecyclerView. It handles data binding for individual store details and sets up
+ * intents for interactive elements like phone dialing and map navigation.
  */
 public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHolder> {
 
-    // List of store objects displayed in the RecyclerView
     private final List<Place> stores;
-
-    // Listener used to handle item click events
     private final OnStoreClickListener listener;
 
     /**
-     * Interface for handling clicks on a store item.
+     * An interface defining the callback to be invoked when a store item is clicked.
      */
     public interface OnStoreClickListener {
+        /**
+         * Called when a specific store item in the RecyclerView is selected.
+         *
+         * @param store The Place object corresponding to the clicked item.
+         */
         void onStoreClick(Place store);
     }
 
     /**
-     * Constructor that initializes the adapter with store data and a click listener.
+     * Constructs a new StoreAdapter.
+     *
+     * @param stores   The list of Place objects containing store data to be displayed.
+     * @param listener The callback listener for item click events.
      */
     public StoreAdapter(List<Place> stores, OnStoreClickListener listener) {
         this.stores = stores;
@@ -44,7 +50,11 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHol
     }
 
     /**
-     * Inflates the layout for a single store item and creates a ViewHolder.
+     * Called when RecyclerView needs a new ViewHolder of the given type to represent an item.
+     *
+     * @param parent   The ViewGroup into which the new View will be added after it is bound to an adapter position.
+     * @param viewType The view type of the new View.
+     * @return A new StoreViewHolder that holds a View of the given view type.
      */
     @NonNull
     @Override
@@ -55,7 +65,10 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHol
     }
 
     /**
-     * Binds store data to the ViewHolder at the given position.
+     * Called by RecyclerView to display the data at the specified position.
+     *
+     * @param holder   The ViewHolder which should be updated to represent the contents of the item at the given position.
+     * @param position The position of the item within the adapter's data set.
      */
     @Override
     public void onBindViewHolder(@NonNull StoreViewHolder holder, int position) {
@@ -64,7 +77,9 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHol
     }
 
     /**
-     * Returns the total number of store items.
+     * Returns the total number of items in the data set held by the adapter.
+     *
+     * @return The total number of stores.
      */
     @Override
     public int getItemCount() {
@@ -72,16 +87,17 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHol
     }
 
     /**
-     * ViewHolder representing a single store item in the list.
+     * A ViewHolder class that encapsulates the view hierarchy for a single store item.
      */
     static class StoreViewHolder extends RecyclerView.ViewHolder {
 
-        // UI components for displaying store details
         TextView storeName, storeAddress, storePhone;
         MaterialButton callButton, directionsButton;
 
         /**
-         * Initializes the UI elements from the item layout.
+         * Constructs a new StoreViewHolder and resolves its UI component references.
+         *
+         * @param itemView The root view of the store list item layout.
          */
         public StoreViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -93,26 +109,26 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHol
         }
 
         /**
-         * Binds a store object to the UI and sets all click listeners.
+         * Binds the specific store data to the UI components and configures the explicit
+         * intents for making phone calls and opening map directions.
+         *
+         * @param store    The Place object containing the data to display.
+         * @param listener The listener to invoke for general item clicks.
          */
         public void bind(final Place store, final OnStoreClickListener listener) {
 
-            // Display store information
             storeName.setText(store.getName());
             storeAddress.setText(store.getAddress());
             storePhone.setText(store.getPhoneNumber());
 
-            // Handle click on the entire item
             itemView.setOnClickListener(v -> listener.onStoreClick(store));
 
-            // Open phone dialer with the store's number
             callButton.setOnClickListener(v -> {
                 Intent intent = new Intent(Intent.ACTION_DIAL,
                         Uri.parse("tel:" + store.getPhoneNumber()));
                 itemView.getContext().startActivity(intent);
             });
 
-            // Open Google Maps with directions to the store
             directionsButton.setOnClickListener(v -> {
                 Uri gmmIntentUri = Uri.parse(
                         "geo:0,0?q=" + store.getLatitude() + "," +
@@ -123,7 +139,6 @@ public class StoreAdapter extends RecyclerView.Adapter<StoreAdapter.StoreViewHol
                 Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
                 mapIntent.setPackage("com.google.android.apps.maps");
 
-                // Launch only if Google Maps is available
                 if (mapIntent.resolveActivity(itemView.getContext().getPackageManager()) != null) {
                     itemView.getContext().startActivity(mapIntent);
                 }

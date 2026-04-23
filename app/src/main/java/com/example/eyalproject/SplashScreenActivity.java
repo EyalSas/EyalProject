@@ -18,15 +18,26 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 
+/**
+ * An activity serving as the entry point of the app, displaying an animated splash screen before
+ * transitioning to the WelcomeActivity. Controls sequential and grouped view animations.
+ */
 public class SplashScreenActivity extends AppCompatActivity {
     private static final long SPLASH_SCREEN_TIMEOUT = 4000;
 
-    // bgCircle3, loadingSpinner, loadingContainer removed — not in new layout
     private ImageView bgCircle1, bgCircle2;
     private TextView welcomeText, taglineText, loadingText, versionText;
     private LinearProgressIndicator progressBar;
     private MaterialCardView logoCard;
 
+    /**
+     * Called when the splash screen activity initializes. Hides the action bar,
+     * resolves layout views, and triggers the animation sequence.
+     *
+     * @param savedInstanceState If the activity is being re-initialized after previously being
+     * shut down then this Bundle contains the data it most recently
+     * supplied.
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -40,6 +51,10 @@ public class SplashScreenActivity extends AppCompatActivity {
         setupAnimations();
     }
 
+    /**
+     * Binds internal variables to the layout components and resets initial alpha values
+     * to zero for a smooth fade-in animation later.
+     */
     private void initializeViews() {
         logoCard      = findViewById(R.id.logoCard);
         welcomeText   = findViewById(R.id.welcomeText);
@@ -50,7 +65,6 @@ public class SplashScreenActivity extends AppCompatActivity {
         bgCircle1     = findViewById(R.id.bgCircle1);
         bgCircle2     = findViewById(R.id.bgCircle2);
 
-        // Hide elements that animate in
         welcomeText.setAlpha(0f);
         taglineText.setAlpha(0f);
         loadingText.setAlpha(0f);
@@ -58,6 +72,10 @@ public class SplashScreenActivity extends AppCompatActivity {
         progressBar.setAlpha(0f);
     }
 
+    /**
+     * Attaches a global layout listener to ensure views are measured before
+     * animations begin, kicking off the primary logo animation once ready.
+     */
     private void setupAnimations() {
         logoCard.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
             @Override
@@ -68,8 +86,11 @@ public class SplashScreenActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Animates the main application logo onto the screen using scaling, rotation, and alpha changes.
+     * Schedules subsequent text and progress animations to run via timed Handlers.
+     */
     private void startLogoAnimation() {
-        // Logo card entrance
         AnimatorSet logoSet = new AnimatorSet();
         logoSet.playTogether(
                 ObjectAnimator.ofFloat(logoCard, "scaleX",   0f, 1f),
@@ -81,7 +102,6 @@ public class SplashScreenActivity extends AppCompatActivity {
         logoSet.setInterpolator(new OvershootInterpolator(1.2f));
         logoSet.start();
 
-        // Staggered text + loading animations
         new Handler().postDelayed(this::animateWelcomeText,  400);
         new Handler().postDelayed(this::animateTaglineText,  800);
         new Handler().postDelayed(this::animateLoadingSection, 1200);
@@ -92,6 +112,9 @@ public class SplashScreenActivity extends AppCompatActivity {
         new Handler().postDelayed(this::navigateToNextActivity, SPLASH_SCREEN_TIMEOUT);
     }
 
+    /**
+     * Animates the "Welcome" text rising into place and fading in.
+     */
     private void animateWelcomeText() {
         AnimatorSet set = new AnimatorSet();
         set.playTogether(
@@ -103,6 +126,9 @@ public class SplashScreenActivity extends AppCompatActivity {
         set.start();
     }
 
+    /**
+     * Animates the sub-tagline expanding and fading into place using a bounce effect.
+     */
     private void animateTaglineText() {
         AnimatorSet set = new AnimatorSet();
         set.playTogether(
@@ -115,8 +141,10 @@ public class SplashScreenActivity extends AppCompatActivity {
         set.start();
     }
 
+    /**
+     * Triggers the appearance of the loading text section and applies a continuous pulsating effect.
+     */
     private void animateLoadingSection() {
-        // Fade in loading text (replaces old loadingContainer)
         ObjectAnimator textAlpha = ObjectAnimator.ofFloat(loadingText, "alpha", 0f, 1f);
         textAlpha.setDuration(600);
         textAlpha.start();
@@ -124,6 +152,9 @@ public class SplashScreenActivity extends AppCompatActivity {
         startPulseAnimation(loadingText);
     }
 
+    /**
+     * Animates the visibility of the primary progress bar and the application version string.
+     */
     private void animateProgressAndVersion() {
         ObjectAnimator progressAlpha = ObjectAnimator.ofFloat(progressBar, "alpha", 0f, 1f);
         progressAlpha.setDuration(600);
@@ -134,6 +165,9 @@ public class SplashScreenActivity extends AppCompatActivity {
         versionAlpha.start();
     }
 
+    /**
+     * Initializes continuous, slow rotational animations on the background decorative circles.
+     */
     private void startBackgroundAnimations() {
         if (bgCircle1 != null) {
             ObjectAnimator c1 = ObjectAnimator.ofFloat(bgCircle1, "rotation", 0f, 360f);
@@ -151,6 +185,11 @@ public class SplashScreenActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Applies an infinite repeating scale-in and scale-out animation to simulate a pulsing visual.
+     *
+     * @param view The target View to animate.
+     */
     private void startPulseAnimation(android.view.View view) {
         ObjectAnimator sx = ObjectAnimator.ofFloat(view, "scaleX", 1f, 1.1f, 1f);
         ObjectAnimator sy = ObjectAnimator.ofFloat(view, "scaleY", 1f, 1.1f, 1f);
@@ -164,6 +203,10 @@ public class SplashScreenActivity extends AppCompatActivity {
         sy.start();
     }
 
+    /**
+     * Prepares to switch to the WelcomeActivity by reversing the logo animation and defining
+     * a transition sequence once the exit animation concludes.
+     */
     private void navigateToNextActivity() {
         AnimatorSet exitSet = new AnimatorSet();
         exitSet.playTogether(
@@ -190,6 +233,10 @@ public class SplashScreenActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Called when the activity is destroyed. Cleans up any running view animations to prevent
+     * potential memory leaks or zombie states.
+     */
     @Override
     protected void onDestroy() {
         if (logoCard  != null) logoCard.clearAnimation();

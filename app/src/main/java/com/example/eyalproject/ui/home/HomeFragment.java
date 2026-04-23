@@ -35,6 +35,11 @@ import com.squareup.picasso.Picasso;
 
 import java.util.Locale;
 
+/**
+ * A fragment representing the home dashboard of the application.
+ * It provides users with quick navigation links, store statistics,
+ * and an interactive carousel showcasing available products.
+ */
 public class HomeFragment extends Fragment {
 
     private MaterialButton buttonAbout, buttonFeatures, buttonContact;
@@ -44,6 +49,15 @@ public class HomeFragment extends Fragment {
     private ImageView logoImage;
     private Handler animationHandler = new Handler();
 
+    /**
+     * Called to have the fragment instantiate its user interface view.
+     * Initializes layout components, assigns interaction listeners, and triggers entrance animations.
+     *
+     * @param inflater           The LayoutInflater object that can be used to inflate any views in the fragment.
+     * @param container          If non-null, this is the parent view that the fragment's UI should be attached to.
+     * @param savedInstanceState If non-null, this fragment is being re-constructed from a previous saved state.
+     * @return Return the View for the fragment's UI.
+     */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_home, container, false);
@@ -55,6 +69,11 @@ public class HomeFragment extends Fragment {
         return rootView;
     }
 
+    /**
+     * Binds local variables to their respective views declared in the XML layout.
+     *
+     * @param rootView The root view hierarchy of the fragment.
+     */
     private void initializeViews(View rootView) {
         buttonAbout = rootView.findViewById(R.id.buttonAbout);
         buttonFeatures = rootView.findViewById(R.id.buttonFeatures);
@@ -72,6 +91,10 @@ public class HomeFragment extends Fragment {
         logoCard = rootView.findViewById(R.id.logoCard);
     }
 
+    /**
+     * Attaches click event listeners to the primary navigation buttons and customizes
+     * their click feedback animations.
+     */
     private void setupClickListeners() {
         buttonAbout.setOnClickListener(v -> {
             showLoadingProgress();
@@ -94,6 +117,10 @@ public class HomeFragment extends Fragment {
         setupStatsCardsInteractions();
     }
 
+    /**
+     * Configures interactive click listeners for the informational statistic cards,
+     * displaying custom designed toasts with descriptive information when tapped.
+     */
     private void setupStatsCardsInteractions() {
         statsCard1.setOnClickListener(v -> {
             animateStatsCardClick(v, () -> showDesignedToast(
@@ -123,6 +150,12 @@ public class HomeFragment extends Fragment {
         });
     }
 
+    /**
+     * Applies a quick press-down and release scaling animation to a statistics card.
+     *
+     * @param v      The card view being animated.
+     * @param action A runnable to execute immediately after the animation completes.
+     */
     private void animateStatsCardClick(View v, Runnable action) {
         v.animate()
                 .scaleX(0.95f)
@@ -140,6 +173,15 @@ public class HomeFragment extends Fragment {
                 .start();
     }
 
+    /**
+     * Displays a custom stylized Toast message to provide detailed feedback.
+     * Falls back to a standard Toast if layout inflation fails.
+     *
+     * @param title    The bold title string.
+     * @param message  The detailed message string.
+     * @param colorRes The resource ID of the color to use for the card background.
+     * @param iconRes  The resource ID for the icon to display.
+     */
     private void showDesignedToast(String title, String message, int colorRes, int iconRes) {
         if (getContext() == null) return;
 
@@ -180,10 +222,19 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    /**
+     * Displays a standard Android Toast message.
+     *
+     * @param message The message to display.
+     */
     private void showSimpleToast(String message) {
         Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show();
     }
 
+    /**
+     * Orchestrates the sequential execution of entrance animations for all elements
+     * on the home screen to create a cohesive loading experience.
+     */
     private void startAnimations() {
         animateLogoEntrance();
         loadStaticStats();
@@ -192,6 +243,10 @@ public class HomeFragment extends Fragment {
         new Handler().postDelayed(this::startPulseAnimation, 2000);
     }
 
+    /**
+     * Sets the static numerical data for the statistic cards and initiates
+     * dynamic counting animations for numerical values.
+     */
     private void loadStaticStats() {
         statsValue1.setText("9");
         animateNumberCounter(statsValue1, 0, 9, 800);
@@ -202,6 +257,9 @@ public class HomeFragment extends Fragment {
         statsValue3.setText("24/7");
     }
 
+    /**
+     * Animates the central logo card spinning and scaling into view.
+     */
     private void animateLogoEntrance() {
         logoCard.setScaleX(0f);
         logoCard.setScaleY(0f);
@@ -220,6 +278,9 @@ public class HomeFragment extends Fragment {
         startLogoFloatingAnimation();
     }
 
+    /**
+     * Initiates a continuous, subtle vertical floating animation applied to the central logo.
+     */
     private void startLogoFloatingAnimation() {
         ValueAnimator floatAnimator = ValueAnimator.ofFloat(0f, 1f);
         floatAnimator.setDuration(2000);
@@ -233,6 +294,9 @@ public class HomeFragment extends Fragment {
         floatAnimator.start();
     }
 
+    /**
+     * Initiates a continuous scaling pulse animation on the logo card.
+     */
     private void startPulseAnimation() {
         ScaleAnimation pulse = new ScaleAnimation(1f, 1.05f, 1f, 1.05f,
                 Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
@@ -242,6 +306,10 @@ public class HomeFragment extends Fragment {
         logoCard.startAnimation(pulse);
     }
 
+    /**
+     * Staggers the fade-in and slide-up animations for the textual content,
+     * statistics cards, and navigation buttons.
+     */
     private void animateContentEntrance() {
         animateTextEntrance(welcomeText, 0);
         animateTextEntrance(subtitleText, 100);
@@ -253,6 +321,12 @@ public class HomeFragment extends Fragment {
         animateButtonEntrance(buttonContact, 700);
     }
 
+    /**
+     * Animates a TextView fading in and sliding up into its final layout position.
+     *
+     * @param textView The TextView to animate.
+     * @param delay    The delay in milliseconds before the animation begins.
+     */
     private void animateTextEntrance(TextView textView, long delay) {
         textView.setAlpha(0f);
         textView.setTranslationY(30f);
@@ -265,6 +339,12 @@ public class HomeFragment extends Fragment {
                 .start();
     }
 
+    /**
+     * Animates a statistic MaterialCardView scaling and fading into view.
+     *
+     * @param card  The MaterialCardView to animate.
+     * @param delay The delay in milliseconds before the animation begins.
+     */
     private void animateStatsCardEntrance(MaterialCardView card, long delay) {
         card.setScaleX(0f);
         card.setScaleY(0f);
@@ -280,6 +360,12 @@ public class HomeFragment extends Fragment {
                 .start();
     }
 
+    /**
+     * Animates a generic view (typically a button) fading in and sliding up into place.
+     *
+     * @param button The view to animate.
+     * @param delay  The delay in milliseconds before the animation begins.
+     */
     private void animateButtonEntrance(View button, long delay) {
         button.setAlpha(0f);
         button.setTranslationY(50f);
@@ -292,6 +378,11 @@ public class HomeFragment extends Fragment {
                 .start();
     }
 
+    /**
+     * Retrieves the authenticated user's username by querying the hosting MainActivity.
+     *
+     * @return The username, or null if it cannot be determined.
+     */
     private String getUsername() {
         if (getActivity() != null && getActivity() instanceof MainActivity) {
             return ((MainActivity) getActivity()).getUsername();
@@ -299,18 +390,32 @@ public class HomeFragment extends Fragment {
         return null;
     }
 
+    /**
+     * Evaluates user context and schedules a celebratory animation sequence for the statistics cards.
+     */
     private void loadServiceStats() {
         String username = getUsername();
         if (username == null || getContext() == null) return;
         new Handler().postDelayed(this::animateStatsCelebration, 2000);
     }
 
+    /**
+     * Executes a staggered bouncing effect across all three statistics cards to draw attention.
+     */
     private void animateStatsCelebration() {
         animateBounceEffect(statsCard1);
         new Handler().postDelayed(() -> animateBounceEffect(statsCard2), 150);
         new Handler().postDelayed(() -> animateBounceEffect(statsCard3), 300);
     }
 
+    /**
+     * Animates a TextView incrementally counting up from a starting value to an end value.
+     *
+     * @param textView The TextView to update with numerical values.
+     * @param start    The integer starting value.
+     * @param end      The integer ending value.
+     * @param duration The duration of the counting animation in milliseconds.
+     */
     private void animateNumberCounter(TextView textView, int start, int end, long duration) {
         ValueAnimator animator = ValueAnimator.ofInt(start, end);
         animator.setDuration(duration);
@@ -322,6 +427,11 @@ public class HomeFragment extends Fragment {
         animator.start();
     }
 
+    /**
+     * Applies a quick scaling bounce effect to a specific view.
+     *
+     * @param view The view to animate.
+     */
     private void animateBounceEffect(View view) {
         view.animate()
                 .scaleX(1.1f)
@@ -335,6 +445,12 @@ public class HomeFragment extends Fragment {
                 .start();
     }
 
+    /**
+     * Applies a subtle press and release animation to a button before executing its intended action.
+     *
+     * @param v      The button view clicked.
+     * @param action The runnable logic to fire after the animation.
+     */
     private void animateModernButtonClick(View v, Runnable action) {
         v.animate()
                 .scaleX(0.95f)
@@ -351,6 +467,9 @@ public class HomeFragment extends Fragment {
                 .start();
     }
 
+    /**
+     * Fades in a linear progress indicator at the top of the screen to signify background work.
+     */
     private void showLoadingProgress() {
         loadingProgress.setVisibility(View.VISIBLE);
         loadingProgress.setAlpha(0f);
@@ -362,6 +481,9 @@ public class HomeFragment extends Fragment {
         animationHandler.postDelayed(this::hideLoadingProgress, 1500);
     }
 
+    /**
+     * Fades out and hides the linear progress indicator.
+     */
     private void hideLoadingProgress() {
         loadingProgress.animate()
                 .alpha(0f)
@@ -370,10 +492,13 @@ public class HomeFragment extends Fragment {
                 .start();
     }
 
+    /**
+     * Fetches a subset of products from Firestore and displays them in a horizontal,
+     * scrollable popup window acting as a featured carousel.
+     */
     private void showRandomProductCarousel() {
         if (getContext() == null || getView() == null) return;
 
-        // 💡 FIX: Fetch products from Firebase Firestore asynchronously
         FirebaseFirestore.getInstance().collection("products")
                 .limit(10)
                 .get()
@@ -413,6 +538,15 @@ public class HomeFragment extends Fragment {
                 .addOnFailureListener(e -> showSimpleToast("Failed to load products."));
     }
 
+    /**
+     * Inflates a generic product card, hides interactive buy elements, and adds it
+     * sequentially into the horizontal carousel container.
+     *
+     * @param inflater  The LayoutInflater used to create the view.
+     * @param container The parent LinearLayout hosting the carousel items.
+     * @param name      The product name.
+     * @param imageUrl  The URL of the product image.
+     */
     private void addProductCardToCarousel(LayoutInflater inflater, LinearLayout container, String name, String imageUrl) {
         View productView = inflater.inflate(R.layout.table_row_products, container, false);
 
@@ -455,6 +589,10 @@ public class HomeFragment extends Fragment {
         container.addView(productView);
     }
 
+    /**
+     * Called when the fragment's view is being destroyed. Removes queued handler callbacks
+     * to ensure animations do not attempt to modify views that no longer exist.
+     */
     @Override
     public void onDestroyView() {
         super.onDestroyView();

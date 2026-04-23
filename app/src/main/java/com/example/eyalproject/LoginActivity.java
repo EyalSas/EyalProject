@@ -12,6 +12,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
+/**
+ * An activity that manages user login operations. Validates input credentials,
+ * connects to Firebase Authentication via FirebaseHelper, and routes the user
+ * to the main activity upon a successful login.
+ */
 public class LoginActivity extends AppCompatActivity {
 
     private TextInputEditText editTextUsername, editTextPassword;
@@ -20,6 +25,14 @@ public class LoginActivity extends AppCompatActivity {
     private ProgressBar loginProgress;
     private FirebaseHelper firebaseHelper;
 
+    /**
+     * Called when the activity is starting. Initializes the UI components, creates the
+     * FirebaseHelper instance, and sets up click listeners for the login and registration buttons.
+     *
+     * @param savedInstanceState If the activity is being re-initialized after previously being
+     * shut down then this Bundle contains the data it most recently
+     * supplied.
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -30,8 +43,6 @@ public class LoginActivity extends AppCompatActivity {
 
         buttonLogin.setOnClickListener(v -> validateAndLogin());
 
-        // ✅ FIX: Wire up the Register button — was never connected before
-        // FLAG_ACTIVITY_CLEAR_TOP keeps the back stack clean without killing RegisterActivity
         buttonRegister.setOnClickListener(v -> {
             Intent intent = new Intent(LoginActivity.this, RegisterActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -39,6 +50,9 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Binds the layout elements to their respective object instances.
+     */
     private void initializeViews() {
         usernameLayout  = findViewById(R.id.usernameLayout);
         passwordLayout  = findViewById(R.id.passwordLayout);
@@ -49,8 +63,11 @@ public class LoginActivity extends AppCompatActivity {
         loginProgress   = findViewById(R.id.loginProgress);
     }
 
+    /**
+     * Validates the input fields to ensure they are not empty before attempting
+     * an authentication process. Displays inline errors if validation fails.
+     */
     private void validateAndLogin() {
-        // Clear previous errors
         usernameLayout.setError(null);
         passwordLayout.setError(null);
 
@@ -69,6 +86,13 @@ public class LoginActivity extends AppCompatActivity {
         authenticateUser(username, password);
     }
 
+    /**
+     * Invokes the Firebase authentication logic to log the user in with the provided credentials.
+     * Controls the visibility of the loading state and responds to authentication callbacks.
+     *
+     * @param username The username input by the user.
+     * @param password The password input by the user.
+     */
     private void authenticateUser(String username, String password) {
         loginProgress.setVisibility(View.VISIBLE);
         buttonLogin.setEnabled(false);
@@ -84,12 +108,17 @@ public class LoginActivity extends AppCompatActivity {
             public void onFailure(String error) {
                 loginProgress.setVisibility(View.GONE);
                 buttonLogin.setEnabled(true);
-                // Show error inline on the password field for wrong password
                 passwordLayout.setError("Login failed: " + error);
             }
         });
     }
 
+    /**
+     * Navigates the user to the MainActivity upon successful login, transferring the username
+     * as an extra and clearing the activity backstack.
+     *
+     * @param username The successfully authenticated username.
+     */
     private void navigateToMainActivity(String username) {
         Intent intent = new Intent(LoginActivity.this, MainActivity.class);
         intent.putExtra("USERNAME", username);

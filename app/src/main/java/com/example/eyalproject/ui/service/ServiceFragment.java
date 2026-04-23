@@ -29,12 +29,32 @@ import com.google.firebase.firestore.QueryDocumentSnapshot;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * A fragment responsible for managing user service requests.
+ * It provides a dual-role interface:
+ * - Standard Users: Can submit new service requests and view their own request history and statistics.
+ * - Administrators: Can view all system-wide service requests and mark pending requests as completed.
+ */
 public class ServiceFragment extends Fragment {
 
     private FragmentServiceBinding binding;
     private String username;
 
+    /**
+     * The designated username string that grants administrative privileges within this fragment.
+     */
     private static final String ADMIN_USERNAME = "admin";
+
+    /**
+     * Called to have the fragment instantiate its user interface view.
+     * Initializes the binding, retrieves the current user's username from the hosting activity,
+     * and triggers the initial UI setup and data loading.
+     *
+     * @param inflater           The LayoutInflater object that can be used to inflate any views in the fragment.
+     * @param container          If non-null, this is the parent view that the fragment's UI should be attached to.
+     * @param savedInstanceState If non-null, this fragment is being re-constructed from a previous saved state.
+     * @return Return the View for the fragment's UI.
+     */
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         binding = FragmentServiceBinding.inflate(inflater, container, false);
@@ -50,6 +70,10 @@ public class ServiceFragment extends Fragment {
         return root;
     }
 
+    /**
+     * Configures the initial visibility and interaction states of the UI components
+     * based on whether the current user is an administrator or a standard user.
+     */
     private void initializeUI() {
         Button addServiceBtn = binding.btnAddService;
         EditText serviceNameEt = binding.editTextServiceName;
@@ -80,16 +104,26 @@ public class ServiceFragment extends Fragment {
         }
     }
 
+    /**
+     * Orchestrates the retrieval of data from the database by calling the specific
+     * methods responsible for updating statistics and loading the list of service items.
+     */
     private void loadServicesFromDatabase() {
         updateServiceCounts();
         loadServiceItems();
     }
 
+    /**
+     * Submits a new service request to the Firebase Firestore database under the current user's UID.
+     * Upon successful insertion, broadcasts an intent to trigger a local notification
+     * and refreshes the fragment's data.
+     *
+     * @param serviceName The name or description of the requested service.
+     */
     private void addService(String serviceName) {
         if (FirebaseAuth.getInstance().getCurrentUser() == null) return;
         String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-        // 💡 FIX: Save service request to Firebase
         Map<String, Object> serviceRequest = new HashMap<>();
         serviceRequest.put("serviceName", serviceName);
         serviceRequest.put("ownerUid", uid);
@@ -101,7 +135,6 @@ public class ServiceFragment extends Fragment {
                 .addOnSuccessListener(documentReference -> {
                     if (!isAdded() || getContext() == null) return;
 
-                    // Trigger notification via Broadcast Receiver
                     Intent intent = new Intent(getContext(), CartReminderReceiver.class);
                     intent.setAction("NEW_SERVICE_REQUEST");
                     intent.putExtra("message", username + " has requested a new service: " + serviceName);
@@ -118,13 +151,17 @@ public class ServiceFragment extends Fragment {
                 });
     }
 
+    /**
+     * Asynchronously fetches the user's service requests from Firestore to calculate
+     * the total number of 'waiting' and 'completed' requests, and updates the UI statistic cards.
+     * This method bypasses execution if the current user is an admin, as admins do not track personal stats.
+     */
     private void updateServiceCounts() {
         if (ADMIN_USERNAME.equalsIgnoreCase(username) || FirebaseAuth.getInstance().getCurrentUser() == null) {
             return;
         }
         String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-        // 💡 FIX: Fetch counts asynchronously from Firebase
         FirebaseFirestore.getInstance().collection("services")
                 .whereEqualTo("ownerUid", uid)
                 .get()
@@ -150,6 +187,10 @@ public class ServiceFragment extends Fragment {
                 });
     }
 
+    /**
+     * Retrieves service request documents from Firestore and dynamically populates the UI container.
+     * Admins receive a chronological list of all requests, while standard users receive only their own.
+     */
     private void loadServiceItems() {
         LinearLayout servicesContainer = binding.servicesContainer;
         servicesContainer.removeAllViews();
@@ -158,13 +199,13 @@ public class ServiceFragment extends Fragment {
         FirebaseFirestore db = FirebaseFirestore.getInstance();
         Query query;
 
-        // 💡 FIX: Query logic branches for Admin vs User
         if (isAdmin) {
             query = db.collection("services").orderBy("timestamp", Query.Direction.ASCENDING);
         } else {
             if (FirebaseAuth.getInstance().getCurrentUser() == null) return;
             String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            query = db.collection("services").whereEqualTo("ownerUid", uid);        }
+            query = db.collection("services").whereEqualTo("ownerUid", uid);
+        }
 
         query.get().addOnSuccessListener(querySnapshot -> {
             if (!isAdded() || getContext() == null) return;
@@ -186,11 +227,28 @@ public class ServiceFragment extends Fragment {
         });
     }
 
+    /**
+     * Converts a value in density-independent pixels (dp) to absolute pixels (px).
+     *
+     * @param dp The dimension in dp to convert.
+     * @return The calculated dimension in pixels.
+     */
     private int dpToPx(int dp) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, getResources().getDisplayMetrics());
     }
 
-    // 💡 FIX: Pass Firebase Document ID so the Admin can update the exact record
+    /**
+     * Programmatically constructs a visual card representing a single service request.
+     * If the user is an admin, it includes the requester's name and an interactive button
+     * to mark pending requests as completed.
+     *
+     * @param docId         The unique Firestore document ID of the service request.
+     * @param serviceName   The name or description of the requested service.
+     * @param status        The current status of the request ('waiting' or 'completed').
+     * @param ownerUsername The username of the user who submitted the request.
+     * @param isAdmin       A boolean indicating if the viewing user has administrative privileges.
+     * @return The constructed View representing the service card.
+     */
     private View createServiceCard(String docId, String serviceName, String status, String ownerUsername, boolean isAdmin) {
         Context context = getContext();
 
@@ -264,7 +322,6 @@ public class ServiceFragment extends Fragment {
             final String finalServiceName = serviceName;
             final String finalOwnerUsername = ownerUsername;
 
-            // Pass the Document ID to uniquely identify what to update in Firebase
             adminButton.setOnClickListener(v -> handleAdminAction(docId, finalServiceName, finalOwnerUsername));
 
             statusRow.addView(adminButton);
@@ -274,7 +331,14 @@ public class ServiceFragment extends Fragment {
         return rootLayout;
     }
 
-    // 💡 FIX: Update status directly in Firebase
+    /**
+     * Executes a database update to change the status of a specific service request to 'completed'.
+     * Reloads the dataset upon a successful transaction.
+     *
+     * @param docId         The unique Firestore document ID of the service request to modify.
+     * @param serviceName   The name of the service (used for user feedback).
+     * @param ownerUsername The name of the requesting user (used for user feedback).
+     */
     private void handleAdminAction(String docId, String serviceName, String ownerUsername) {
         FirebaseFirestore.getInstance().collection("services").document(docId)
                 .update("status", "completed")
@@ -290,6 +354,10 @@ public class ServiceFragment extends Fragment {
                 });
     }
 
+    /**
+     * Called when the fragment becomes visible to the user. Forces a refresh of the
+     * service data to ensure the UI is in sync with the database.
+     */
     @Override
     public void onResume() {
         super.onResume();
@@ -298,6 +366,10 @@ public class ServiceFragment extends Fragment {
         }
     }
 
+    /**
+     * Called when the view previously created by onCreateView has been detached from the fragment.
+     * Cleans up the view binding to prevent memory leaks.
+     */
     @Override
     public void onDestroyView() {
         super.onDestroyView();

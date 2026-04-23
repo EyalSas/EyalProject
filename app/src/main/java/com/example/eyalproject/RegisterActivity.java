@@ -13,6 +13,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
+/**
+ * An activity that manages new user registration. Validates user input such as email formats
+ * and matching passwords, attempts to register via Firebase Auth, and creates the corresponding
+ * user profile using FirebaseHelper.
+ */
 public class RegisterActivity extends AppCompatActivity {
 
     private TextInputEditText editTextUsername, editTextEmail, editTextPassword, editTextRePassword;
@@ -21,6 +26,14 @@ public class RegisterActivity extends AppCompatActivity {
     private ProgressBar registerProgress;
     private FirebaseHelper firebaseHelper;
 
+    /**
+     * Called when the activity is created. Sets up the initial UI bindings, assigns click listeners
+     * to the action buttons, and instantiates the Firebase helper class.
+     *
+     * @param savedInstanceState If the activity is being re-initialized after previously being
+     * shut down then this Bundle contains the data it most recently
+     * supplied.
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -31,8 +44,6 @@ public class RegisterActivity extends AppCompatActivity {
 
         buttonSignUp.setOnClickListener(v -> validateAndRegister());
 
-        // ✅ FIX: Don't call finish() here — let the user press Back to return from LoginActivity.
-        // Using FLAG_ACTIVITY_CLEAR_TOP ensures we don't stack multiple LoginActivity instances.
         buttonLogin.setOnClickListener(v -> {
             Intent intent = new Intent(RegisterActivity.this, LoginActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -40,6 +51,9 @@ public class RegisterActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Maps local variables to the corresponding view items defined in the layout XML file.
+     */
     private void initializeViews() {
         usernameLayout   = findViewById(R.id.usernameLayout);
         emailLayout      = findViewById(R.id.emailLayout);
@@ -55,8 +69,11 @@ public class RegisterActivity extends AppCompatActivity {
         registerProgress  = findViewById(R.id.registerProgress);
     }
 
+    /**
+     * Executes the primary registration flow: clearing error states, extracting input values,
+     * validating those values, and initiating the Firebase backend registration process.
+     */
     private void validateAndRegister() {
-        // Clear any previous errors
         clearErrors();
 
         String username   = editTextUsername.getText().toString().trim();
@@ -69,6 +86,9 @@ public class RegisterActivity extends AppCompatActivity {
         showProgressAndRegister(username, email, password);
     }
 
+    /**
+     * Removes all active error messages currently displayed on the TextInputLayouts.
+     */
     private void clearErrors() {
         usernameLayout.setError(null);
         emailLayout.setError(null);
@@ -76,6 +96,14 @@ public class RegisterActivity extends AppCompatActivity {
         rePasswordLayout.setError(null);
     }
 
+    /**
+     * Disables the sign up button, displays a progress bar, and sends the user credentials
+     * to Firebase for account creation. Upon success, routes the user to MainActivity.
+     *
+     * @param username The chosen username.
+     * @param email    The user's email address.
+     * @param password The desired password.
+     */
     private void showProgressAndRegister(String username, String email, String password) {
         registerProgress.setVisibility(View.VISIBLE);
         buttonSignUp.setEnabled(false);
@@ -98,8 +126,14 @@ public class RegisterActivity extends AppCompatActivity {
     }
 
     /**
-     * Validates all fields and shows inline errors on the TextInputLayout
-     * instead of only showing a Toast — better UX.
+     * Performs a series of checks on the provided inputs, verifying that fields aren't empty,
+     * the email is correctly formatted, and that the passwords match and meet minimum lengths.
+     *
+     * @param username   The raw text from the username input.
+     * @param email      The raw text from the email input.
+     * @param password   The raw text from the password input.
+     * @param rePassword The raw text from the repeat-password input.
+     * @return True if all input criteria are satisfied, False otherwise.
      */
     private boolean isInputValid(String username, String email, String password, String rePassword) {
         if (username.isEmpty()) {
@@ -140,14 +174,24 @@ public class RegisterActivity extends AppCompatActivity {
         return true;
     }
 
+    /**
+     * Convenience method to show a brief toast message.
+     *
+     * @param message The message text to display.
+     */
     private void showToast(String message) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
 
+    /**
+     * Transfers control to the MainActivity, clearing the backstack so the user cannot navigate
+     * back to the registration screen.
+     *
+     * @param username The username assigned during registration.
+     */
     private void navigateToMainActivity(String username) {
         Intent intent = new Intent(RegisterActivity.this, MainActivity.class);
         intent.putExtra("USERNAME", username);
-        // Clear the entire back stack so the user can't navigate back to Register after login
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);
         finish();

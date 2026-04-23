@@ -8,10 +8,21 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.eyalproject.databinding.ActivityWelcomeBinding;
 
+/**
+ * A landing screen presented to users that acts as the main junction for
+ * unauthenticated users to either create a new account or log into an existing one.
+ */
 public class WelcomeActivity extends AppCompatActivity {
 
     private ActivityWelcomeBinding binding;
 
+    /**
+     * Inflates the layout bindings and executes setup methods on initial creation.
+     *
+     * @param savedInstanceState If the activity is being re-initialized after previously being
+     * shut down then this Bundle contains the data it most recently
+     * supplied.
+     */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -22,6 +33,10 @@ public class WelcomeActivity extends AppCompatActivity {
         setupClickListeners();
     }
 
+    /**
+     * Attaches click event listeners to the interactive UI components, mapping them
+     * to explicitly launch the intended Register or Login activity intents.
+     */
     private void setupClickListeners() {
         binding.registerButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -31,7 +46,6 @@ public class WelcomeActivity extends AppCompatActivity {
             }
         });
 
-        // Use signInText (TextView) instead of signInButton
         binding.signInText.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -41,6 +55,10 @@ public class WelcomeActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Cleans up the view bindings when the activity reaches the end of its lifecycle
+     * to eliminate memory leaks.
+     */
     @Override
     protected void onDestroy() {
         super.onDestroy();
